@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简历</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        b, strong {
+            font-weight: bold;
+        }
+        
+        u {
+            text-decoration: underline;
+        }
+        
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+            color: #333;
+            line-height: 1.6;
+            padding: 40px 50px;
+            background: #fff;
+        }
+        
+        .resume {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #fff;
+        }
+        
+        .header {
+            border-bottom: 0.3px solid #2c3e506a;
+            padding-bottom: 15px;
+            margin-bottom: 27px;
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 30px;
+        }
+        
+        .header-left {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }
+        
+        .name-title {
+            margin-bottom: 0px;
+            margin-top: 0;
+        }
+        
+        .avatar-container {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            flex-shrink: 0;
+        }
+        
+        .avatar-container:empty {
+            display: none;
+        }
+        
+        .avatar {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            object-position: center;
+            border: 2px solid #e0e0e0;
+            border-radius: 4px;
+        }
+        
+        .avatar[style*="display: none"] {
+            display: none !important;
+        }
+        
+        .name {
+            font-size: 32px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        
+        .position {
+            font-size: 32px;
+            color: #2c3e50;
+            font-weight: bold;
+        }
+        
+        .contact-info {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            font-size: 14px;
+            color: #3d3d3d;
+            margin-top: 5px;
+        }
+        
+        
+        .section {
+            margin-bottom: 35px;
+        }
+        
+        .section-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2c3e50;
+            border-left: 4px solid #3498db;
+            padding-left: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .education-item {
+            margin-bottom: 20px;
+        }
+        
+        .education-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+        }
+        
+        .school-name {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .degree {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-left: 10px;
+        }
+        
+        .date {
+            font-size: 13px;
+            color: #95a5a6;
+        }
+        
+        .education-description {
+            font-size: 14px;
+            color: #555;
+            margin-top: 5px;
+            line-height: 1.8;
+        }
+        
+        .personal-intro {
+            font-size: 14px;
+            color: #555;
+            line-height: 1.8;
+            text-align: justify;
+        }
+        
+        .skill-category {
+            margin-bottom: 25px;
+        }
+        
+        .skill-category-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .skill-items {
+            margin-left: 0;
+        }
+        
+        .skill-item {
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 6px;
+            padding-left: 20px;
+            position: relative;
+            line-height: 1.7;
+        }
+        
+        .skill-item::before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: #3498db;
+            font-weight: bold;
+        }
+        
+        .certificate-item {
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 8px;
+            line-height: 1.7;
+        }
+        
+        .work-item {
+            margin-bottom: 25px;
+        }
+        
+        .work-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 10px;
+        }
+        
+        .company-position {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+        }
+        
+        .company {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .work-position {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .work-date {
+            font-size: 13px;
+            color: #95a5a6;
+        }
+        
+        .responsibilities {
+            margin-top: 10px;
+        }
+        
+        .responsibility-item {
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 6px;
+            padding-left: 20px;
+            position: relative;
+            line-height: 1.7;
+        }
+        
+        .responsibility-item::before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: #3498db;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="resume">
+        <!-- 头部 -->
+        <div class="header">
+            <div class="header-content">
+                <div class="header-left">
+                    <div class="name-title">
+                        <span class="name">{{NAME}}</span>
+                        <span class="position"> - {{POSITION}}</span>
+                    </div>
+                    <div class="contact-info">
+                        {{CONTACT_INFO}}
+                    </div>
+                </div>
+                <div class="avatar-container">
+                    {{AVATAR}}
+                </div>
+            </div>
+        </div>
+        
+        <!-- 教育经历 -->
+        <div class="section">
+            <div class="section-title">教育经历</div>
+            {{EDUCATION}}
+        </div>
+        
+        <!-- 个人介绍 -->
+        <div class="section">
+            <div class="section-title">个人介绍</div>
+            <div class="personal-intro">{{PERSONAL_INTRODUCTION}}</div>
+        </div>
+        
+        <!-- 工作经历 -->
+        <div class="section">
+            <div class="section-title">工作经历</div>
+            {{WORK_EXPERIENCE}}
+        </div>
+        
+        <!-- 专业技能 -->
+        <div class="section">
+            <div class="section-title">专业技能</div>
+            {{PROFESSIONAL_SKILLS}}
+        </div>
+        
+        <!-- 证书 -->
+        <div class="section">
+            <div class="section-title">证书</div>
+            {{CERTIFICATES}}
+        </div>
+    </div>
+</body>
+</html>
+
