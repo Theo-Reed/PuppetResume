@@ -1,10 +1,18 @@
 import express, { Request, Response } from 'express';
 import multer, { FileFilterCallback } from 'multer';
+import cloud from 'wx-server-sdk';
 import { ResumeGenerator } from './resumeGenerator';
-import { ResumeData } from './types';
+import { ResumeData, JobData, UserResumeProfile } from './types';
 
 const app = express();
 const generator = new ResumeGenerator();
+
+// 初始化微信云开发
+cloud.init({
+  env: cloud.DYNAMIC_TYPE_ANY,
+});
+
+const db = cloud.database();
 
 // 配置 multer 用于文件上传
 const upload = multer({
@@ -103,6 +111,49 @@ app.post('/api/generate', upload.single('avatar'), async (req: MulterRequest, re
     console.error('生成 PDF 时出错:', error);
     res.status(500).json({
       error: '生成 PDF 失败',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * 从云数据库获取数据并生成简历
+ * POST /api/generate-from-db
+ * 
+ * 参数：
+ * - jobId: 岗位 ID
+ * - userId: 用户 ID
+ */
+app.post('/api/generate-from-db', async (req: Request, res: Response) => {
+  const { jobId, userId } = req.body;
+
+  if (!jobId || !userId) {
+    return res.status(400).json({
+      error: '缺少必需参数：jobId 和 userId',
+    });
+  }
+
+  try {
+    // 1. 获取岗位数据
+    // const jobRes = await db.collection('jobs').doc(jobId).get();
+    // const jobData = jobRes.data as JobData;
+
+    // 2. 获取用户简历资料
+    // const userRes = await db.collection('resume_profiles').where({ _openid: userId }).get();
+    // const userData = userRes.data[0] as UserResumeProfile;
+
+    // 目前仅返回 success，后续完善逻辑
+    console.log(`收到生成请求: jobId=${jobId}, userId=${userId}`);
+    
+    res.json({
+      status: 'success',
+      message: '已收到请求',
+      data: { jobId, userId }
+    });
+  } catch (error: any) {
+    console.error('获取数据库数据时出错:', error);
+    res.status(500).json({
+      error: '数据库查询失败',
       message: error.message,
     });
   }
