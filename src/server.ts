@@ -108,14 +108,6 @@ app.post('/api/generate', upload.single('avatar'), async (req: MulterRequest, re
       resumeData.avatar = req.body.avatar;
     }
 
-    // 如果通过文件上传提供了头像，优先使用文件上传的头像
-    if (avatar) {
-      resumeData.avatar = avatar;
-    } else if (req.body.avatar) {
-      // 否则使用请求体中的头像（URL 或 Base64）
-      resumeData.avatar = req.body.avatar;
-    }
-
     // 验证必需字段
     if (!resumeData.name || !resumeData.position) {
       return res.status(400).json({
@@ -127,8 +119,10 @@ app.post('/api/generate', upload.single('avatar'), async (req: MulterRequest, re
     const pdfBuffer = await generator.generatePDFToBuffer(resumeData);
 
     // 返回 PDF
+    const safeName = encodeURIComponent(resumeData.name);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="resume-${resumeData.name}.pdf"`);
+    // 使用 RFC 5987 标准编码文件名，解决中文乱码及非法字符问题
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.pdf"; filename*=UTF-8''${safeName}.pdf`);
     res.send(pdfBuffer);
   } catch (error: any) {
     console.error('生成 PDF 时出错:', error);
