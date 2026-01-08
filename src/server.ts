@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import multer, { FileFilterCallback } from 'multer';
 import { ResumeGenerator } from './resumeGenerator';
-import { ResumeData } from './types';
+import { ResumeData, GenerateFromFrontendRequest } from './types';
 
 const app = express();
 const generator = new ResumeGenerator();
@@ -55,6 +55,23 @@ interface MulterRequest extends Request {
 
 app.post('/api/generate', upload.single('avatar'), async (req: MulterRequest, res: Response) => {
   try {
+    // [测试用] 打印接收到的数据，方便调试
+    console.log('🚀 收到生成请求');
+    
+    // 如果是这种新结构，打印更详细的信息
+    if (req.body.resume_profile && req.body.job_data) {
+      const payload = req.body as GenerateFromFrontendRequest;
+      console.log('👤 用户姓名:', payload.resume_profile.name);
+      console.log('💼 岗位名称:', payload.job_data.title_chinese || payload.job_data.title);
+      console.log('🤖 AI 指令:', payload.resume_profile.aiMessage);
+    } else {
+      console.log('📦 Body 内容 (常规结构):', JSON.stringify(req.body, null, 2));
+    }
+
+    if (req.file) {
+      console.log('📷 收到上传文件:', req.file.originalname, '大小:', req.file.size);
+    }
+
     let resumeData: ResumeData;
     let avatar: string | undefined;
 

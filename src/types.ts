@@ -90,3 +90,70 @@ export interface ResumeData {
   certificates?: Certificate[];
 }
 
+/**
+ * 岗位信息 (Job Data)
+ */
+export interface JobData {
+  _id: string;
+  title: string;
+  title_chinese: string;
+  title_english: string;
+  team: string;
+  summary: string;
+  summary_chinese: string[];
+  summary_english: string[];
+  salary: string;
+  salary_english: string;
+  createdAt: string;
+  source_name: string;
+  source_name_english: string;
+  source_url: string;
+  type: string;
+  description: string;
+  description_chinese: string;
+  description_english: string;
+  city: string;
+  experience: string;
+}
+
+/**
+ * 用户简历资料 (Resume Profile)
+ */
+export interface UserResumeProfile {
+  name: string;
+  photo: string; // Cloud ID or HTTPS URL
+  gender: string;
+  birthday: string; // YYYY-MM
+  identity: string; // '在校生', '职场人'
+  wechat: string;
+  email: string;
+  phone: string;
+  educations: {
+    school: string;
+    degree: string;
+    major: string;
+    startDate: string;
+    endDate: string;
+    description: string;
+  }[];
+  workExperiences: {
+    company: string;
+    jobTitle: string;
+    businessDirection: string;
+    startDate: string;
+    endDate: string;
+  }[];
+  certificates: string[];
+  aiMessage: string;
+}
+
+/**
+ * 前端发送的生成请求体
+ */
+export interface GenerateFromFrontendRequest {
+  jobId: string;
+  userId: string;
+  resume_profile: UserResumeProfile;
+  job_data: JobData;
+}
+
