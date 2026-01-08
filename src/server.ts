@@ -2,11 +2,13 @@ import express, { Request, Response } from 'express';
 import multer, { FileFilterCallback } from 'multer';
 import { ResumeGenerator } from './resumeGenerator';
 import { GeminiService } from './geminiService';
-import { ResumeData, GenerateFromFrontendRequest } from './types';
+import { ResumeAIService } from './resumeAIService';
+import { ResumeData, GenerateFromFrontendRequest, mapFrontendRequestToResumeData } from './types';
 
 const app = express();
 const generator = new ResumeGenerator();
 const gemini = new GeminiService();
+const aiService = new ResumeAIService();
 
 // 配置 multer 用于文件上传
 const upload = multer({
@@ -77,23 +79,33 @@ app.post('/api/generate', upload.single('avatar'), async (req: MulterRequest, re
     let resumeData: ResumeData;
     let avatar: string | undefined;
 
-    // 检查是否有文件上传
+    // 检查是否有文件上传 (Multer)
     if (req.file) {
-      // 如果有文件上传，转换为 Base64
       avatar = bufferToDataURL(req.file.buffer, req.file.mimetype);
     }
 
-    // 解析简历数据
-    if (req.body.resumeData) {
-      // 如果是字符串，解析为 JSON
+    // 1. 处理新的请求结构 (resume_profile + job_data)
+    if (req.body.resume_profile && req.body.job_data) {
+      const payload = req.body as GenerateFromFrontendRequest;
+      // 调用 AI 增强服务
+      resumeData = await aiService.enhance(payload);
+    } else if (req.body.resumeData) {
+      // 2. 处理原有的 JSON 结构
       if (typeof req.body.resumeData === 'string') {
         resumeData = JSON.parse(req.body.resumeData);
       } else {
         resumeData = req.body.resumeData;
       }
     } else {
-      // 如果没有 resumeData 字段，尝试直接使用请求体
+      // 3. 处理直接的请求体
       resumeData = req.body;
+    }
+
+    // 优先使用文件上传的头像，其次是请求体中的头像，最后是 profile 里的 photo
+    if (avatar) {
+      resumeData.avatar = avatar;
+    } else if (req.body.avatar) {
+      resumeData.avatar = req.body.avatar;
     }
 
     // 如果通过文件上传提供了头像，优先使用文件上传的头像

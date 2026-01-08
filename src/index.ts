@@ -1,7 +1,19 @@
 import { ResumeGenerator } from './resumeGenerator';
-import { ResumeData } from './types';
-import { writeFileSync } from 'fs';
+import { ResumeAIService } from './resumeAIService';
+import { ResumeData, GenerateFromFrontendRequest, mapFrontendRequestToResumeData } from './types';
+import { writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
+
+/**
+ * 从 test_data.json 加载并转换数据
+ */
+function getTestData(): ResumeData {
+  const rawData = readFileSync(join(process.cwd(), 'test_data.json'), 'utf-8');
+  const payload = JSON.parse(rawData) as GenerateFromFrontendRequest;
+  
+  // 统一调用映射方法
+  return mapFrontendRequestToResumeData(payload);
+}
 
 /**
  * 获取基础简历数据（不包含头像）
@@ -196,9 +208,55 @@ async function main() {
   }
 }
 
+/**
+ * 使用测试数据生成简历
+ */
+async function generateWithTestData() {
+  const generator = new ResumeGenerator();
+  const aiService = new ResumeAIService();
+  
+  const rawData = readFileSync(join(process.cwd(), 'test_data.json'), 'utf-8');
+  const payload = JSON.parse(rawData) as GenerateFromFrontendRequest;
+
+  try {
+    console.log('正在调用 Gemini AI 增强简历内容...');
+    const resumeData = await aiService.enhance(payload);
+    
+    console.log('开始使用增强后的数据生成 PDF...');
+    const outputPath = join(process.cwd(), 'resume-from-test-data.pdf');
+    await generator.generatePDFToFile(resumeData, outputPath);
+    console.log(`简历 PDF 已成功生成: ${outputPath}`);
+  } catch (error) {
+    console.error('流程中出错:', error);
+    process.exit(1);
+  } finally {
+    await generator.close();
+  }
+}
+
+// 修改 main 函数支持 test-data 参数
+async function mainWithUpdate() {
+  const args = process.argv.slice(2);
+  const command = args[0];
+
+  if (command === 'test-data') {
+    await generateWithTestData();
+  } else if (command === 'with-avatar') {
+    await generateResumeWithAvatar();
+  } else if (command === 'without-avatar') {
+    await generateResumeWithoutAvatar();
+  } else {
+    console.log('使用方法:');
+    console.log('  npm run dev:test-data               # 使用 test_data.json 生成简历');
+    console.log('  npm run dev:example with-avatar      # 生成内置示例简历');
+    console.log('');
+    await generateResumeWithAvatar();
+  }
+}
+
 // 如果直接运行此文件，执行示例
 if (require.main === module) {
-  main().catch(console.error);
+  mainWithUpdate().catch(console.error);
 }
 
 // 导出供其他模块使用

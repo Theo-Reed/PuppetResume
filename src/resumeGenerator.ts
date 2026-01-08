@@ -84,9 +84,6 @@ export class ResumeGenerator {
       items.push(contact.phone);
     }
     items.push(`${yearsOfExperience}年经验`);
-    if (languages) {
-      items.push(languages);
-    }
     
     return items.join(' | ');
   }
@@ -189,21 +186,11 @@ export class ResumeGenerator {
       return '';
     }
     
-    return certificates
-      .map((cert) => {
-        const parts: string[] = [this.escapeHtml(cert.name)];
-        
-        if (cert.date) {
-          parts.push(this.escapeHtml(cert.date));
-        }
-        
-        if (cert.score) {
-          parts.push(this.escapeHtml(cert.score));
-        }
-        
-        return `<div class="certificate-item">${parts.join(' | ')}</div>`;
-      })
+    const items = certificates
+      .map((cert) => `<div class="certificate-item">${this.escapeHtml(cert.name)}</div>`)
       .join('');
+
+    return `<div class="certificate-container">${items}</div>`;
   }
 
   /**
@@ -529,6 +516,13 @@ export class ResumeGenerator {
     let html = readFileSync(this.templatePath, 'utf-8');
     
     // 替换占位符
+    const isEnglish = data.languages === 'english';
+    html = html.replace('{{TITLE_EDUCATION}}', isEnglish ? 'Education' : '教育经历');
+    html = html.replace('{{TITLE_PERSONAL_INTRO}}', isEnglish ? 'Personal Introduction' : '个人介绍');
+    html = html.replace('{{TITLE_CERTIFICATES}}', isEnglish ? 'Certificates' : '证书');
+    html = html.replace('{{TITLE_WORK_EXP}}', isEnglish ? 'Work Experience' : '工作经历');
+    html = html.replace('{{TITLE_SKILLS}}', isEnglish ? 'Professional Skills' : '专业技能');
+
     html = html.replace('{{AVATAR}}', this.formatAvatar(data.avatar));
     html = html.replace('{{NAME}}', this.escapeHtml(data.name));
     html = html.replace('{{POSITION}}', this.escapeHtml(data.position));

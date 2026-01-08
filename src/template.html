@@ -192,11 +192,20 @@
             font-weight: bold;
         }
         
+        .certificate-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
         .certificate-item {
-            font-size: 14px;
-            color: #555;
-            margin-bottom: 8px;
-            line-height: 1.7;
+            font-size: 13px;
+            color: #444;
+            background-color: #f5f7f9;
+            padding: 4px 12px;
+            border-radius: 4px;
+            border: 0.5px solid #e0e6ed;
+            line-height: 1.4;
         }
         
         .work-item {
@@ -277,31 +286,31 @@
         
         <!-- 教育经历 -->
         <div class="section">
-            <div class="section-title">教育经历</div>
+            <div class="section-title">{{TITLE_EDUCATION}}</div>
             {{EDUCATION}}
         </div>
         
         <!-- 个人介绍 -->
         <div class="section">
-            <div class="section-title">个人介绍</div>
+            <div class="section-title">{{TITLE_PERSONAL_INTRO}}</div>
             <div class="personal-intro">{{PERSONAL_INTRODUCTION}}</div>
         </div>
         
         <!-- 工作经历 -->
         <div class="section">
-            <div class="section-title">工作经历</div>
+            <div class="section-title">{{TITLE_WORK_EXP}}</div>
             {{WORK_EXPERIENCE}}
         </div>
         
         <!-- 专业技能 -->
         <div class="section">
-            <div class="section-title">专业技能</div>
+            <div class="section-title">{{TITLE_SKILLS}}</div>
             {{PROFESSIONAL_SKILLS}}
         </div>
         
         <!-- 证书 -->
         <div class="section">
-            <div class="section-title">证书</div>
+            <div class="section-title">{{TITLE_CERTIFICATES}}</div>
             {{CERTIFICATES}}
         </div>
     </div>

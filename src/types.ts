@@ -144,6 +144,7 @@ export interface UserResumeProfile {
     endDate: string;
   }[];
   certificates: string[];
+  skills: string[];
   aiMessage: string;
 }
 
@@ -153,7 +154,55 @@ export interface UserResumeProfile {
 export interface GenerateFromFrontendRequest {
   jobId: string;
   userId: string;
+  language?: string;
   resume_profile: UserResumeProfile;
   job_data: JobData;
+}
+
+/**
+ * 集中管理数据转换逻辑
+ */
+export function mapFrontendRequestToResumeData(payload: GenerateFromFrontendRequest): ResumeData {
+  const profile = payload.resume_profile;
+  const job = payload.job_data;
+  const isEnglish = payload.language === 'english';
+
+  return {
+    name: profile.name,
+    position: isEnglish ? (job.title_english || job.title) : (job.title_chinese || job.title),
+    contact: {
+      email: profile.email,
+      wechat: profile.wechat,
+      phone: profile.phone,
+    },
+    avatar: profile.photo,
+    languages: isEnglish ? 'english' : 'chinese',
+    yearsOfExperience: 0, // 默认 0，后续可根据工作经历计算
+    education: profile.educations.map(edu => {
+      // 处理学历显示逻辑：全日制只显示学位，非全日制额外标注
+      let degreeDisplay = edu.degree;
+      if (edu.degree.includes('全日制')) {
+        degreeDisplay = edu.degree.replace(/\s*\(全日制\)\s*/g, '').replace(/全日制/g, '').trim();
+      }
+      
+      return {
+        school: edu.school,
+        degree: `${edu.major} ${degreeDisplay}`,
+        graduationDate: `${edu.startDate} - ${edu.endDate}`,
+        description: edu.description
+      };
+    }),
+    personalIntroduction: "", // 后续由 AI 生成
+    workExperience: profile.workExperiences.map(exp => ({
+      company: exp.company,
+      position: exp.jobTitle,
+      startDate: exp.startDate,
+      endDate: exp.endDate,
+      responsibilities: [] // 后续由 AI 生成
+    })),
+    certificates: (profile.certificates || []).map(cert => ({
+      name: cert
+    }))
+  };
 }
 
