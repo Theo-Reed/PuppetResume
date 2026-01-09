@@ -435,7 +435,11 @@ export class ResumeGenerator {
   /**
    * HTML 转义
    */
-  private escapeHtml(text: string): string {
+  private escapeHtml(text: any): string {
+    if (text === undefined || text === null) {
+      return '';
+    }
+    const stringText = String(text);
     const map: { [key: string]: string } = {
       '&': '&amp;',
       '<': '&lt;',
@@ -443,7 +447,7 @@ export class ResumeGenerator {
       '"': '&quot;',
       "'": '&#039;',
     };
-    return text.replace(/[&<>"']/g, (m) => map[m]);
+    return stringText.replace(/[&<>"']/g, (m) => map[m]);
   }
 
   /**

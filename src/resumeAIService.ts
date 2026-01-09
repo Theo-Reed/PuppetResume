@@ -72,20 +72,41 @@ ${profile.workExperiences.map((exp, i) => `
 
     try {
       const aiResponse = await this.gemini.generateContent(prompt);
+      // 清理可能的 Markdown 标记
       const jsonStr = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-      const enhancedData = JSON.parse(jsonStr);
+      
+      let enhancedData: any;
+      try {
+        enhancedData = JSON.parse(jsonStr);
+      } catch (e) {
+        console.error("❌ AI 返回的不是有效的 JSON 格式");
+        console.error("📄 AI 原始输出:", aiResponse);
+        throw new Error("AI 生成结果格式错误，无法解析为 JSON");
+      }
 
+      // 严格验证字段，缺失任何一个都视为失败
+      const requiredFields = ['position', 'yearsOfExperience', 'personalIntroduction', 'professionalSkills', 'workExperience'];
+      for (const field of requiredFields) {
+        if (enhancedData[field] === undefined || enhancedData[field] === null) {
+          console.error(`❌ AI 输出缺失关键字段: ${field}`);
+          console.error("📄 AI 返回的 JSON 内容:", jsonStr);
+          throw new Error(`AI 增强失败：缺失关键字段 "${field}"`);
+        }
+      }
+
+      // 合并数据
       return {
         ...baseData,
-        position: targetTitle, // 🚀 强行覆盖 AI 返回的 position，确保万无一失
-        yearsOfExperience: enhancedData.yearsOfExperience || baseData.yearsOfExperience,
+        position: targetTitle, // 依然强制使用我们预期的标题
+        yearsOfExperience: enhancedData.yearsOfExperience,
         personalIntroduction: enhancedData.personalIntroduction,
         professionalSkills: enhancedData.professionalSkills,
         workExperience: enhancedData.workExperience,
       };
-    } catch (error) {
-      console.error("AI 增强失败，降级使用原始数据:", error);
-      return baseData;
+    } catch (error: any) {
+      // 这里的错误会向上抛给 runBackgroundTask，从而触发数据库状态更新为 failed
+      console.error("AI 增强流程异常:", error.message);
+      throw error;
     }
   }
 }
