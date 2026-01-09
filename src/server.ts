@@ -26,15 +26,16 @@ if (FINAL_ENV_ID) {
   });
 }
 
+// 在 @cloudbase/node-sdk 中，数据库通过 app.database() 获取
+// 但存储操作（如 uploadFile）直接在 tcbApp 实例上调用
 const db = tcbApp ? tcbApp.database() : null;
-const storage = tcbApp ? tcbApp.storage() : null;
 
 /**
  * 异步后台任务：负责 AI 增强、PDF 生成和上传云存储
  */
 async function runBackgroundTask(taskId: string, payload: GenerateFromFrontendRequest) {
-  if (!db || !storage) {
-    console.error(`[Task ${taskId}] ❌ 无法启动后台任务：数据库或存储未初始化`);
+  if (!tcbApp || !db) {
+    console.error(`[Task ${taskId}] ❌ 无法启动后台任务：TCB App 或数据库未初始化`);
     return;
   }
 
@@ -47,12 +48,14 @@ async function runBackgroundTask(taskId: string, payload: GenerateFromFrontendRe
     // 2. 生成 PDF Buffer
     const pdfBuffer = await generator.generatePDFToBuffer(resumeData);
 
-    console.log(`[Task ${taskId}] ☁️ 开始上传到云存储...`);
+    console.log(`[Task ${taskId}] ☁️ 开始上传到云存储 (使用 tcbApp.uploadFile)...`);
     // 3. 上传到云存储
     // 路径规则：resumes/用户OpenID/时间戳_taskId.pdf
     const timestamp = Date.now();
     const cloudPath = `resumes/${payload.userId}/${timestamp}_${taskId}.pdf`;
-    const uploadRes = await storage.uploadFile({
+    
+    // 注意：@cloudbase/node-sdk 的 uploadFile 是直接在 app 实例上的，没有 .storage() 方法
+    const uploadRes = await tcbApp.uploadFile({
       cloudPath: cloudPath,
       fileContent: pdfBuffer
     });
@@ -111,17 +114,6 @@ function bufferToDataURL(buffer: Buffer, mimeType: string): string {
 /**
  * 生成简历 PDF API
  * POST /api/generate
- * 
- * 请求体支持两种格式：
- * 1. JSON 格式（推荐）：
- *    {
- *      "resumeData": { ... },
- *      "avatar": "https://example.com/avatar.jpg" 或 "data:image/jpeg;base64,..."
- *    }
- * 
- * 2. FormData 格式（支持文件上传）：
- *    - resumeData: JSON 字符串
- *    - avatar: 图片文件（可选）
  */
 interface MulterRequest extends Request {
   file?: Express.Multer.File;
@@ -140,8 +132,8 @@ app.post('/api/generate', upload.single('avatar'), async (req: MulterRequest, re
     console.log('👤 用户姓名:', payload.resume_profile.name);
     console.log('💼 岗位名称:', payload.job_data.title_chinese || payload.job_data.title);
 
-    if (!db) {
-      return res.status(500).json({ error: '数据库服务未就绪，请检查 CLOUD_ENV 配置' });
+    if (!db || !tcbApp) {
+      return res.status(500).json({ error: '数据库或 TCB 服务未就绪，请检查 CLOUD_ENV 配置' });
     }
 
     // 1. 生成唯一 Task ID
@@ -164,7 +156,6 @@ app.post('/api/generate', upload.single('avatar'), async (req: MulterRequest, re
     });
 
     // 3. 开启异步后台任务
-    // 不 await，直接让其在后台运行
     runBackgroundTask(taskId, payload);
 
     // 4. 立即返回 TaskID 给前端
@@ -213,8 +204,8 @@ async function startServer() {
   if (tcbApp) {
     console.log(`🔍 正在执行部署自检: 数据库连通性 (${FINAL_ENV_ID})...`);
     try {
-      const db = tcbApp.database();
-      await db.collection('users').limit(1).get();
+      const dbInstance = tcbApp.database();
+      await dbInstance.collection('users').limit(1).get();
       console.log('✅ 数据库连通性测试通过');
     } catch (error: any) {
       console.error('❌ 数据库连通性测试失败');
@@ -247,4 +238,3 @@ process.on('SIGINT', async () => {
 });
 
 export default app;
-
