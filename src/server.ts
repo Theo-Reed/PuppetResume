@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import multer, { FileFilterCallback } from 'multer';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 const tcb = require("@cloudbase/node-sdk");
 import { ResumeGenerator } from './resumeGenerator';
 import { GeminiService } from './geminiService';
@@ -148,7 +148,7 @@ app.post('/api/generate', upload.single('avatar'), async (req: MulterRequest, re
     // 格式: RESUME_年月日时分秒_UUID前8位
     const now = new Date();
     const dateStr = now.toISOString().replace(/[-:T]/g, '').slice(0, 14);
-    const taskId = `RESUME_${dateStr}_${uuidv4().slice(0, 8)}`;
+    const taskId = `RESUME_${dateStr}_${randomUUID().slice(0, 8)}`;
 
     // 2. 预先入库（立即执行）
     console.log(`📡 正在创建任务: ${taskId}`);
