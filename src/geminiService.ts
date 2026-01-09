@@ -72,15 +72,15 @@ export class GeminiService {
   }
 
   /**
-   * 核心调用方法：带重试机制
-   * 优先调用 gemini-2.0-flash，失败后调用 gemini-2.5-pro
+   * 核心调用方法：带重试机制和结果校验
+   * @param prompt 提示词
+   * @param validator 可选的校验函数，返回 false 或抛出错误将触发重试
    */
-  async generateContent(prompt: string): Promise<string> {
+  async generateContent(prompt: string, validator?: (text: string) => boolean | Promise<boolean>): Promise<string> {
     const models = [
       "gemini-3-flash-preview", 
       "gemini-2.5-pro", 
       "gemini-2.5-flash", 
-      "gemini-2.0-flash"
     ];
     
     for (const modelName of models) {
@@ -88,7 +88,6 @@ export class GeminiService {
         console.log(`🤖 尝试使用模型: ${modelName}`);
         const genAI = new GoogleGenerativeAI(this.apiKey);
         
-        // 配置自定义域名（通过设置 API 网关或代理）
         const model = genAI.getGenerativeModel(
           { model: modelName },
           { baseUrl: this.baseUrl }
@@ -98,15 +97,29 @@ export class GeminiService {
         const response = await result.response;
         const text = response.text();
         
+        // 执行逻辑校验
+        if (validator) {
+          try {
+            const isValid = await validator(text);
+            if (!isValid) {
+              throw new Error("模型输出未通过逻辑校验 (包含非法或空值)");
+            }
+          } catch (valError: any) {
+            console.warn(`⚠️ ${modelName} 输出校验失败: ${valError.message}`);
+            throw valError; // 重新抛出以触发 catch 块中的重试逻辑
+          }
+        }
+
         console.log(`✅ ${modelName} 调用成功`);
         return text;
       } catch (error: any) {
-        console.error(`❌ ${modelName} 调用失败:`, error.message);
-        // 如果是最后一个模型也失败了，则抛出错误
+        console.error(`❌ ${modelName} 处理失败:`, error.message);
+        
+        // 如果是最后一个模型也失败了，则抛出最终错误
         if (modelName === models[models.length - 1]) {
-          throw new Error(`所有 Gemini 模型调用均失败: ${error.message}`);
+          throw new Error(`所有 Gemini 模型均无法生成合法内容: ${error.message}`);
         }
-        console.log("🔄 正在尝试切换到备用模型...");
+        console.log("🔄 正在尝试切换到下一个模型...");
       }
     }
     

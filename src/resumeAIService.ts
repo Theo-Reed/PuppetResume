@@ -16,6 +16,14 @@ export class ResumeAIService {
     const { resume_profile: profile, job_data: job, language } = payload;
     const isEnglish = language === 'english';
 
+    // 辅助函数：校验字段是否合法（非空且非 AI 占位符）
+    const isIllegal = (val: any) => {
+      if (val === undefined || val === null) return true;
+      const s = String(val).trim().toLowerCase();
+      // 过滤常见的 AI 逃避性占位符
+      return s === "" || s === "undefined" || s === "null" || s === "nan" || s === "暂无" || s === "none";
+    };
+
     // 直接取值，不再做复杂判断，因为你确认它不为空
     const targetTitle = isEnglish ? (job.title_english || job.title_chinese) : job.title_chinese;
 
@@ -76,28 +84,27 @@ ${profile.workExperiences.map((exp, i) => `
 `;
 
     try {
-      const aiResponse = await this.gemini.generateContent(prompt);
-      // 清理可能的 Markdown 标记
-      const jsonStr = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-      
-      let enhancedData: any;
-      try {
-        enhancedData = JSON.parse(jsonStr);
-      } catch (e) {
-        console.error("❌ AI 返回的不是有效的 JSON 格式");
-        console.error("📄 AI 原始输出:", aiResponse);
-        throw new Error("AI 生成结果格式错误，无法解析为 JSON");
-      }
-
-      // 严格验证字段，缺失任何一个都视为失败
-      const requiredFields = ['position', 'yearsOfExperience', 'personalIntroduction', 'professionalSkills', 'workExperience'];
-      for (const field of requiredFields) {
-        if (enhancedData[field] === undefined || enhancedData[field] === null) {
-          console.error(`❌ AI 输出缺失关键字段: ${field}`);
-          console.error("📄 AI 返回的 JSON 内容:", jsonStr);
-          throw new Error(`AI 增强失败：缺失关键字段 "${field}"`);
+      const aiResponse = await this.gemini.generateContent(prompt, (text) => {
+        try {
+          const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+          const data = JSON.parse(jsonStr);
+          
+          // 严格验证字段，如果缺失或包含非法内容，返回 false 触发重试/切模型
+          const requiredFields = ['position', 'yearsOfExperience', 'personalIntroduction', 'professionalSkills', 'workExperience'];
+          for (const field of requiredFields) {
+            if (isIllegal(data[field])) {
+              throw new Error(`关键字段 "${field}" 内容非法或缺失`);
+            }
+          }
+          return true;
+        } catch (e: any) {
+          throw new Error(`JSON 逻辑校验未通过: ${e.message}`);
         }
-      }
+      });
+
+      // 如果能执行到这里，说明已经通过了上面的 validator 校验
+      const jsonStr = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+      const enhancedData = JSON.parse(jsonStr);
 
       // 合并数据
       return {
