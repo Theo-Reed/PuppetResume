@@ -277,7 +277,9 @@ export class ResumeAIService {
       // 合并数据
       return {
         ...baseData,
-        position: targetTitle, // 依然强制使用我们预期的标题
+        // 使用 AI 生成的专业职级名称，而不是原始的 Target Title
+        // 因为 Target Title 可能包含冗余后缀（如" - 生态系统专家"），而 AI 会根据指令生成标准职称
+        position: enhancedData.position || targetTitle, 
         yearsOfExperience: enhancedData.yearsOfExperience,
         personalIntroduction: enhancedData.personalIntroduction,
         professionalSkills: enhancedData.professionalSkills,

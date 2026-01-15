@@ -52,29 +52,51 @@ RUN apt-get update \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# 4. 设置 Puppeteer 下载源为国内镜像 (关键！否则 npm install 时下载浏览器会卡死)
+# 4. 优化 Puppeteer 安装配置
+# - 跳过默认的 Chromium 下载 (我们只在构建阶段手动安装一次，或者使用系统自带的)
+# - 但为了稳妥，我们这里让 puppeteer 下载它需要的版本，但指定位置到 .cache
 ENV PUPPETEER_DOWNLOAD_HOST=https://npmmirror.com/mirrors
+# 这一行很关键：告诉 Puppeteer 不要把浏览器下载到 ~/.cache，而是项目目录下，方便管理
+ENV PUPPETEER_CACHE_DIR=/app/.cache
 
 # 5. 设置工作目录
 WORKDIR /app
 
-# 6. 复制并安装依赖（包括开发依赖，用于构建）
+# 6. 复制并安装依赖
 COPY package*.json ./
-RUN npm install
+# 这里的 npm install 会触发 postinstall 脚本去下载 Chromium
+# 因为我们配置了国内镜像，速度会有保障
+RUN npm install && npm cache clean --force
 
 # 7. 复制源码并构建 TypeScript 项目
 COPY . .
 RUN npm run build
 
 # 8. 删除开发依赖，只保留生产依赖
+# 注意：prune 可能会误删 puppeteer，但因为我们已经安装到 package.json dependencies 里了，通常没事
+# 但为了极致精简和避免 bug，建议保留 puppeteer
+# 如果空间非常敏感，可以考虑 multi-stage build (多阶段构建)
 RUN npm prune --production
 
-# 9. 暴露端口
+# 9. 移除源码文件，只保留构建产物
+# 这一步可以进一步减小体积
+RUN rm -rf src tsconfig.json
+
+# 10. 创建非特权用户运行服务 (Security Best Practice)
+RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
+    && mkdir -p /home/pptruser/Downloads \
+    && chown -R pptruser:pptruser /home/pptruser \
+    && chown -R pptruser:pptruser /app
+
+# 切换用于运行的用户
+USER pptruser
+
+# 11. 暴露端口
 EXPOSE 3000
 
-# 10. 设置环境变量
+# 12. 设置环境变量
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# 11. 启动命令（使用编译后的 server.js）
+# 13. 启动命令（使用编译后的 server.js）
 CMD ["node", "dist/server.js"]

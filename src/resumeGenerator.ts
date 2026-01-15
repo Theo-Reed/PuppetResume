@@ -26,7 +26,12 @@ export class ResumeGenerator {
     if (!this.browser) {
       this.browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: [
+          '--no-sandbox', 
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage', // 关键：解决 Docker 内存共享不足问题
+          '--disable-gpu' // 节省资源，headless 不需要 GPU
+        ],
       });
     }
   }
@@ -53,6 +58,13 @@ export class ResumeGenerator {
     }
     
     let imageUrl = avatar.trim();
+    
+    // 如果是本地相对路径 (以 /public 开头)，转换为绝对文件路径
+    // 这样 Puppeteer 可以直接读取文件，无需走网络请求，也避免了 localhost 解析问题
+    if (imageUrl.startsWith('/public')) {
+      const absolutePath = join(process.cwd(), imageUrl);
+      imageUrl = `file://${absolutePath}`;
+    }
     
     // 如果已经是 data URL 格式，直接使用
     if (imageUrl.startsWith('data:')) {

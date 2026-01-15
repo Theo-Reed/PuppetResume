@@ -16,7 +16,13 @@ router.post('/getGeneratedResumes', async (req: Request, res: Response) => {
     const db = getDb();
     const collection = db.collection('generated_resumes');
     
-    const query: any = { userId: effectiveOpenId };
+    // Support both field names for compatibility
+    const query: any = { 
+        $or: [
+            { userId: effectiveOpenId },
+            { _openid: effectiveOpenId }
+        ]
+    };
 
     if (jobId) {
         query.jobId = jobId;

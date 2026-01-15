@@ -28,6 +28,12 @@ let db: any;
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Global Logging Middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
 // 静态文件服务 - 用于访问生成的简历
 const PUBLIC_DIR = join(process.cwd(), 'public');
 const RESUMES_DIR = join(PUBLIC_DIR, 'resumes');
@@ -131,7 +137,7 @@ interface MulterRequest extends Request {
   file?: Express.Multer.File;
 }
 
-app.post('/api/generate', upload.single('avatar'), async (req: MulterRequest, res: Response) => {
+app.post('/api/generate', async (req: MulterRequest, res: Response) => {
   try {
     // [测试用] 打印接收到的数据
     console.log('🚀 收到生成请求');
@@ -204,7 +210,9 @@ app.post('/api/generate', upload.single('avatar'), async (req: MulterRequest, re
       _openid: payload.userId,
       task_id: taskId,
       status: 'processing',
-      jobTitle: payload.job_data.title_chinese || payload.job_data.title,
+      jobTitle: payload.job_data.title,
+      jobTitle_cn: payload.job_data.title_chinese,
+      jobTitle_en: payload.job_data.title_english,
       company: payload.job_data.team,
       jobId: payload.jobId,
       createTime: new Date(),

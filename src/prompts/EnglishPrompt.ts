@@ -24,7 +24,13 @@ export function generateEnglishPrompt(context: PromptContext): string {
 You are a world-class resume expert specializing in tailoring profiles for English-speaking job markets. Your core principle is: 【Tailor Everything to the Target Job】.
 
 ### 🚨 Core Instructions (Must be Strictly Followed)
-1. **Target Position Lock**: The generated resume's \`position\` MUST be exactly: "${targetTitle}".
+1. **Professional Title Generation**: The generated resume's \`position\` field MUST be a **Standard Professional Title** based on the target job.
+   - **ABSOLUTELY FORBIDDEN** to use the exact target title string: "${targetTitle}".
+   - You MUST clean "${targetTitle}" into a short, standard industry role.
+   - Rule: Remove all suffixes, hyphens, brackets, department codes.
+   - BAD Example: "Business Development Representative - Ecosystem Specialist"
+   - GOOD Example: "Business Development Representative" or "Ecosystem Manager"
+   - It should look like a real professional identity on a resume header, not a job ad title.
 2. **Remove Irrelevant Background**: If the user's original background clashes with "${targetTitle}", you MUST 【completely remove】 irrelevant tech stacks or business domains from the responsibilities.
 3. **Experience Reshaping**:
    - **⚠️ CRITICAL: Existing Company Names MUST remain unchanged** (User-provided names like "Tencent", "Xiaomi" etc. must be kept exactly as is).
@@ -125,7 +131,7 @@ Experience ${i + 1}:
      * ✅ "Spearheaded 0-to-1 project architecture, driven 200% user growth to 300k DAU."
      * ❌ "Responsible for system optimization." (Too weak)
    - Ensure the user sounds like a **Key Contributor**, not just a participant.
-7. **Formatting**: Use <b> for key metrics, <u> for emphasis (3-4 times each).
+7. **Formatting**: Use <b> for key metrics (optional); Do NOT use markdown bold like **text** in JSON strings.
 
 ### 7. Output Format (Pure JSON)
 {
