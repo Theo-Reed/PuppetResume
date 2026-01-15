@@ -23,6 +23,10 @@ export function generateEnglishPrompt(context: PromptContext): string {
   return `
 You are a world-class resume expert specializing in tailoring profiles for English-speaking job markets. Your core principle is: 【Tailor Everything to the Target Job】.
 
+### ⭐ User Custom Instructions (HIGHEST PRIORITY)
+- **AI Instruction Content**: "${profile.aiMessage || 'None'}"
+- **Crucial Note**: The user-provided 【AI Instruction】 above has the **highest priority**. If any instruction here conflicts with any of the rules below (including title naming, seniority limits, experience reshaping, etc.), you MUST follow the **【AI Instruction】** without exception.
+
 ### 🚨 Core Instructions (Must be Strictly Followed)
 1. **Professional Title Generation**: The generated resume's \`position\` field MUST be a **Standard Professional Title** based on the target job.
    - **ABSOLUTELY FORBIDDEN** to use the exact target title string: "${targetTitle}".
@@ -109,11 +113,12 @@ Experience ${i + 1}:
 - Company: ${exp.company} (DO NOT CHANGE)
 - Original Title: ${exp.jobTitle}
 - Business Direction: ${exp.businessDirection}
+- Work Content: ${exp.workContent || "None"} (Low weight reference: Use only if highly relevant to ${targetTitle}; otherwise IGNORE and regenerate based on target)
 - Time: ${exp.startDate} to ${exp.endDate} (DO NOT CHANGE)
 `).join('\n')}
 
 ### 6. Tasks
-1. **Experience Years**: Final \`yearsOfExperience\` should ${needsSupplement ? `match required ${requiredExp.min} years` : 'equal actual years'}.
+1. **Experience Years**: Final \`yearsOfExperience\` **MUST reach or exceed the minimum requirement for this job** (i.e., at least ${needsSupplement ? requiredExp.min : actualYears} years).
 2. **Sorting**: ${needsSupplement ? `Strictly follow the generated timeline (newest first). Insert supplements in correct chronological spots.` : 'Sort existing experiences reverse-chronologically.'}
 3. **Titles & Seniority**:
    - Strictly follow the SENIORITY GUIDELINES defined above.
@@ -136,7 +141,7 @@ Experience ${i + 1}:
 ### 7. Output Format (Pure JSON)
 {
   "position": "${targetTitle}",
-  "yearsOfExperience": ${needsSupplement ? requiredExp.min : actualYears},
+  "yearsOfExperience": ${context.finalTotalYears},
   "personalIntroduction": "...",
   "professionalSkills": [{ "title": "Category", "items": [...] }],
   "workExperience": [
@@ -159,6 +164,7 @@ ${allWorkExperiences.map((exp, idx) => {
 }
 
 **⚠️ Key Requirements:**
+- **Highest Priority Reminder**: If the user provided an **AI Instruction** ("${profile.aiMessage || 'None'}"), those instructions MUST be satisfied first, even if they contradict general resume tailoring rules.
 - **Company names, start/end dates of EXISTING jobs must be preserved exactly.**
 - Output strictly in **English**.
 `;

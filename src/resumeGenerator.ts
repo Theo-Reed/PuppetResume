@@ -1,6 +1,6 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
 import { readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, extname } from 'path';
 import { ResumeData } from './types';
 
 export class ResumeGenerator {
@@ -59,16 +59,31 @@ export class ResumeGenerator {
     
     let imageUrl = avatar.trim();
     
-    // 如果是本地相对路径 (以 /public 开头)，转换为绝对文件路径
-    // 这样 Puppeteer 可以直接读取文件，无需走网络请求，也避免了 localhost 解析问题
-    if (imageUrl.startsWith('/public')) {
-      const absolutePath = join(process.cwd(), imageUrl);
-      imageUrl = `file://${absolutePath}`;
+    // 更加鲁棒的路径处理：
+    // 无论是相对路径 /public/... 还是完整 URL http://.../public/...
+    // 只要包含 /public/ 且指向本地资源，我们就尝试直接读取本地文件并转换为 Base64
+    // 这样可以避免 Puppeteer 在容器/内网环境下解析 localhost 或 file:// 协议的问题
+    const publicPattern = /\/public\/(.*)/;
+    const match = imageUrl.match(publicPattern);
+    
+    if (match) {
+        const relativePath = `public/${match[1]}`;
+        const absolutePath = join(process.cwd(), relativePath);
+        if (existsSync(absolutePath)) {
+            try {
+                const buffer = readFileSync(absolutePath);
+                const ext = extname(absolutePath).toLowerCase().replace('.', '');
+                const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+                imageUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
+            } catch (e) {
+                console.error(`Failed to read avatar file: ${absolutePath}`, e);
+            }
+        }
     }
     
     // 如果已经是 data URL 格式，直接使用
     if (imageUrl.startsWith('data:')) {
-      return `<img src="${imageUrl}" alt="头像" class="avatar" onerror="this.style.display='none';this.parentElement.style.display='none';" />`;
+        return `<img src="${imageUrl}" alt="头像" class="avatar" onerror="this.style.display='none';this.parentElement.style.display='none';" />`;
     }
     
     // 转义 URL 并添加错误处理
@@ -90,7 +105,10 @@ export class ResumeGenerator {
     if (contact.phone) {
       items.push(contact.phone);
     }
-    items.push(`${yearsOfExperience}年经验`);
+    
+    const isEnglish = languages === 'english';
+    const yearSuffix = isEnglish ? (yearsOfExperience === 1 ? 'year exp' : 'years exp') : '年经验';
+    items.push(`${yearsOfExperience}${yearSuffix}`);
     
     return items.join(' | ');
   }

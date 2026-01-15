@@ -19,6 +19,10 @@ export function generateChinesePrompt(context: PromptContext): string {
   return `
 你是一位顶级的简历包装专家。你的核心原则是：【一切以目标岗位为准】。
 
+### ⭐ 用户自定义指令 (最高优先级)
+- **AI 指令内容**: "${profile.aiMessage || '无'}"
+- **重要说明**: 以上用户提供的【AI 指令】具有**最高优先级**。如果此指令中的要求与下述任何规则（包括职位命名、职级限制、经历重塑等）发生冲突，**必须无条件以【AI 指令】为准**。
+
 ### 🚨 核心指令 (必须严格执行)
 1. **身份定义（Resume Header）**：生成的简历【职位名称】(\`position\`) **必须是该行业的通用、自然且专业的职称**。
    - **绝对禁止**直接使用原始目标岗位名称："${targetTitle}"。
@@ -48,6 +52,14 @@ export function generateChinesePrompt(context: PromptContext): string {
        * 如果当上主管了，第一段主管经验可以写带领5-10人的小团队
        * 主管职位名称示例："XX主管"、"XX团队负责人"、"XX组长"等
 
+   - **标题生成禁忌 (TITLE RESTRICTIONS)**
+     - 严禁在个人头衔 (Resume Header Position) 或工作经历的职位名称中使用 **"资深" (Senior/Deep/Veteran) 或 "专家" (Expert)** 这类词汇，除非用户原文里明确写了。
+     - **推荐替代**：使用 **"高级" (Senior/Advanced) 或直接使用核心职位名**。
+       - ❌ 错误： "资深Java开发工程师"
+       - ❌ 错误： "Java专家"
+       - ✅ 正确： "高级Java开发工程师"
+       - ✅ 正确： "Java开发工程师"
+
 ### 1. 目标岗位信息
 - 岗位名称: ${targetTitle}
 - 岗位描述: ${job.description_chinese || job.description}
@@ -67,6 +79,7 @@ export function generateChinesePrompt(context: PromptContext): string {
 ### 4. 工作经历补充规则 (${needsSupplement ? '必须执行' : '无需执行'})
 ${needsSupplement ? `
 **实际工作年限不足，必须补充工作经历：**
+**注意工作日限制**: 任何生成的补充经历，其**开始时间**绝对不能早于 **${earliestWorkDate}** (通常是根据本科入学+1年推算)。如果计算出的时间段早于该日期，必须自动顺延至该日期之后开始，并相应缩短经验时长，不要生成无效的早期经历。
 
 **需要补充的总年限**: ${supplementYears} 年
 
@@ -74,6 +87,7 @@ ${needsSupplement ? `
 ${supplementSegments.map((seg, idx) => `
 补充经历 ${idx + 1}:
 - 时间段: ${seg.startDate} 至 ${seg.endDate} (${seg.years}年)
+  * **注意**: 如果该结束时间距离当前时间(2026年)小于6个月，请将结束时间直接写为 "至今" 或当前最新月份 (例如 2026-01)，以填补简历空窗期。
 - 公司名称: 根据目标岗位"${targetTitle}"的特点，生成一个符合该岗位风格的工作室名称。例如：
   * 科技/开发岗位：生成有科技感的工作室名称（如"智创科技工作室"、"云码技术工作室"等）
   * 运营/电商岗位：生成运营风格的工作室名称（如"跨境优选工作室"、"数字营销工作室"等）
@@ -120,11 +134,12 @@ ${profile.workExperiences.map((exp, i) => `
 - 公司: ${exp.company} (必须保持不变，不能修改)
 - 原始职位: ${exp.jobTitle}
 - 业务方向: ${exp.businessDirection}
+- 工作内容: ${exp.workContent || "无"} (仅供参考。权重极低：如果与目标岗位"${targetTitle}"高度相关，可适当参考并优化；如果无关，则必须忽略此内容，完全重新生成)
 - 时间: ${exp.startDate} 至 ${exp.endDate} (必须保持不变，不能修改)
 `).join('\n')}
 
 ### 6. 任务
-1. **工作年限**：如果${needsSupplement ? '需要补充' : '不需要补充'}，最终输出的 \`yearsOfExperience\` 应该${needsSupplement ? `达到或接近 ${requiredExp.min} 年` : '等于实际工作年限'}。
+1. **工作年限**：如果${needsSupplement ? '需要补充' : '不需要补充'}，最终输出的 \`yearsOfExperience\` **必须达到或超过该岗位的最低年限要求**（即至少 ${needsSupplement ? requiredExp.min : actualYears} 年）。
 2. **工作经历排序**：${needsSupplement ? `严格按照上面时间线的顺序输出所有工作经历（最新的在最上面，最老的放在最下面）。补充的经历必须插入到正确的时间位置，不能简单地放在最后。` : '输出重塑后的现有工作经历，按时间倒序排列（最新的在最上面）。'}
 3. **职位名称和职级**：
    - ${requiredExp.min <= 5 ? '**严禁使用"高级xx"、"资深xx"等职级称号**（岗位经验要求没有大于5年）' : '可以考虑使用"高级xx"，但需谨慎使用"资深xx"（岗位经验要求大于5年）'}
@@ -153,7 +168,7 @@ ${profile.workExperiences.map((exp, i) => `
 ### 7. 输出格式 (纯 JSON)
 {
   "position": "${targetTitle}",
-  "yearsOfExperience": ${needsSupplement ? requiredExp.min : actualYears},
+  "yearsOfExperience": ${context.finalTotalYears},
   "personalIntroduction": "...",
   "professionalSkills": [{ "title": "类别", "items": [...] }],
   "workExperience": [
@@ -180,6 +195,7 @@ ${allWorkExperiences.map((exp, idx) => {
 }
 
 **⚠️ 关键要求：**
+- **最高优先级提醒**：如果用户提供了 **AI 指令** ("${profile.aiMessage || '无'}"), 必须优先满足指令要求，即使它违反了上述的通用简历包装规则。
 ${needsSupplement ? `- **现有工作经历的公司名称、开始时间、结束时间必须与原始数据完全一致，不能修改**（用户自己填写的公司名称必须原样保留）
 - workExperience 数组必须严格按照上面时间线的顺序输出（最新的在最上面，最老的放在最下面）
 - 补充的工作经历必须插入到正确的时间位置，不能简单地放在最后

@@ -139,6 +139,7 @@ export interface UserResumeProfile {
     company: string;
     jobTitle: string;
     businessDirection: string;
+    workContent?: string;
     startDate: string;
     endDate: string;
   }[];

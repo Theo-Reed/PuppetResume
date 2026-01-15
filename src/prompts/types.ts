@@ -11,6 +11,7 @@ export interface PromptContext {
   needsSupplement: boolean;
   actualYears: number;
   supplementYears: number;
+  finalTotalYears: number;
   supplementSegments: Array<{ startDate: string; endDate: string; years: number }>;
   allWorkExperiences: Array<{ startDate: string; endDate: string; type: 'existing' | 'supplement'; index?: number }>;
 }

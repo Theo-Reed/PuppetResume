@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import * as dotenv from 'dotenv';
+import { runBackgroundTask, TaskServices } from './taskRunner';
 
 // 加载环境变量
 dotenv.config();
@@ -23,6 +24,13 @@ const aiService = new ResumeAIService();
 
 const COLLECTION_RESUMES = 'generated_resumes';
 let db: any; 
+
+// Share services globally
+app.locals.services = {
+    generator,
+    gemini,
+    aiService
+};
 
 // 解析 JSON 请求体
 app.use(express.json({ limit: '10mb' }));
@@ -44,66 +52,6 @@ app.use('/public', express.static(PUBLIC_DIR));
 
 // 注册所有接口路由
 app.use(interfaceRouter);
-
-/**
- * 异步后台任务：负责 AI 增强、PDF 生成和本地保存
- */
-async function runBackgroundTask(taskId: string, payload: GenerateFromFrontendRequest) {
-  if (!db) {
-    console.error(`[Task ${taskId}] ❌ 无法启动后台任务：数据库未初始化`);
-    return;
-  }
-
-  try {
-    // 在生成之前检查连通性，避免浪费计算资源
-    const check = await gemini.checkConnectivity();
-    if (!check.success) {
-      throw new Error(`Gemini 服务不可用: ${check.message}`);
-    }
-
-    console.log(`[Task ${taskId}] 🤖 开始 AI 增强内容...`);
-    // 1. 调用 AI 增强服务
-    const resumeData = await aiService.enhance(payload);
-
-    console.log(`[Task ${taskId}] 📄 开始生成 PDF...`);
-    // 2. 生成 PDF Buffer
-    const pdfBuffer = await generator.generatePDFToBuffer(resumeData);
-
-    console.log(`[Task ${taskId}] 💾 开始保存到本地服务器...`);
-    // 3. 保存到本地
-    const timestamp = Date.now();
-    const fileName = `${payload.userId}_${timestamp}_${taskId}.pdf`;
-    const filePath = join(RESUMES_DIR, fileName);
-    
-    writeFileSync(filePath, pdfBuffer);
-    const fileUrl = `/public/resumes/${fileName}`;
-
-    // 4. 更新数据库状态为成功
-    await db.collection(COLLECTION_RESUMES).updateOne({ task_id: taskId }, {
-      $set: {
-        status: 'completed',
-        fileUrl: fileUrl, 
-        completeTime: new Date()
-      }
-    });
-
-    console.log(`[Task ${taskId}] ✅ 任务完成，保存路径: ${filePath}`);
-  } catch (error: any) {
-    console.error(`[Task ${taskId}] ❌ 任务处理失败:`, error);
-    // 更新数据库状态为失败
-    try {
-      await db.collection(COLLECTION_RESUMES).updateOne({ task_id: taskId }, {
-        $set: {
-          status: 'failed',
-          errorMessage: error.message || '内部处理超时或生成失败',
-          completeTime: new Date()
-        }
-      });
-    } catch (dbError) {
-      console.error(`[Task ${taskId}] ❌ 无法更新失败状态到数据库:`, dbError);
-    }
-  }
-}
 
 // 配置 multer 用于文件上传
 const upload = multer({
@@ -216,11 +164,13 @@ app.post('/api/generate', async (req: MulterRequest, res: Response) => {
       company: payload.job_data.team,
       jobId: payload.jobId,
       createTime: new Date(),
-      resumeInfo: payload.resume_profile // 保存快照
+      resumeInfo: payload.resume_profile, // 保存快照
+      jobData: payload.job_data // 保存 Job 数据快照，用于重试
     });
 
     // 3. 开启异步后台任务
-    runBackgroundTask(taskId, payload);
+    const services: TaskServices = { db, gemini, aiService, generator };
+    runBackgroundTask(taskId, payload, services);
 
     // 4. 立即返回 TaskID 给前端
     res.json({

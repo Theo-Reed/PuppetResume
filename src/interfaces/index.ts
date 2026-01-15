@@ -33,6 +33,7 @@ import searchMajors from './searchMajors';
 import batchSaveJobs from './batchSaveJobs';
 import login from './login';
 import upload from './upload';
+import retryGenerateResume from './retryGenerateResume';
 
 const router = Router();
 
@@ -46,6 +47,7 @@ router.use('/api', checkMemberStatus);
 router.use('/api', clearAllSearchConditions);
 router.use('/api', createOrder);
 router.use('/api', deleteGeneratedResume);
+router.use('/api', retryGenerateResume);
 router.use('/api', payCallback);
 router.use('/api/search', deleteSearchCondition);
 router.use('/api', getFeaturedJobList);
