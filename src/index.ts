@@ -287,12 +287,18 @@ async function directRenderTest(mode: 'with-avatar' | 'without-avatar') {
         wechat: profile.wechat,
         website: profile.website // 确保包含 website
       },
-      education: profile.educations.map(edu => ({
-        school: edu.school,
-        degree: `${edu.major} ${edu.degree}`,
-        graduationDate: `${edu.startDate} - ${edu.endDate}`,
-        description: edu.description
-      })),
+      education: profile.educations.map(edu => {
+        let degree = edu.degree;
+        if (degree.includes('全日制') && !degree.includes('非全日制')) {
+          degree = degree.replace(/\s*\(全日制\)\s*/g, '').replace(/全日制/g, '').trim();
+        }
+        return {
+          school: edu.school,
+          degree: `${edu.major} ${degree}`,
+          graduationDate: `${edu.startDate} - ${edu.endDate}`,
+          description: edu.description
+        };
+      }),
       personalIntroduction: "这里是直接渲染测试生成的个人介绍。本测试旨在验证不经过 AI 处理的情况下，PDF 渲染器能否正确展示个人博客链接等联系信息。\n我的个人网站是：" + (profile.website || "未设置"),
       professionalSkills: [
         { title: "测试技能 A", items: ["单元测试", "集成测试", "端到端测试"] },

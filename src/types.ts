@@ -194,7 +194,7 @@ export function mapFrontendRequestToResumeData(payload: GenerateFromFrontendRequ
     education: profile.educations.map(edu => {
       let degree = edu.degree;
 
-      if (!isEnglish && degree.includes('全日制')) {
+      if (!isEnglish && degree.includes('全日制') && !degree.includes('非全日制')) {
         degree = degree.replace(/\s*\(全日制\)\s*/g, '').replace(/全日制/g, '').trim();
       }
       
