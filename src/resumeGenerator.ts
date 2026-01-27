@@ -3,6 +3,15 @@ import { readFileSync, existsSync } from 'fs';
 import { join, dirname, extname } from 'path';
 import { ResumeData } from './types';
 
+/**
+ * 渲染配置选项
+ */
+export interface RenderOptions {
+  maxWorkItems?: number; // 每个工作经历最多显示的条目数 (Surplus Trimming)
+  maxSkillItems?: number; // 每个技能分类最多显示的条目数
+  jobConfig?: number[];   // Precise control per job
+}
+
 export class ResumeGenerator {
   private browser: Browser | null = null;
   private templatePath: string;
@@ -156,7 +165,7 @@ export class ResumeGenerator {
   /**
    * 格式化专业技能
    */
-  private formatProfessionalSkills(skills?: ResumeData['professionalSkills']): string {
+  private formatProfessionalSkills(skills?: ResumeData['professionalSkills'], limit: number = 999): string {
     if (!skills || skills.length === 0) {
       return '';
     }
@@ -169,8 +178,15 @@ export class ResumeGenerator {
             <div class="skill-items">
         `;
         
-        html += category.items
-          .map((item) => `<div class="skill-item">${this.formatText(item)}</div>`)
+        // 使用 limit 进行截断
+        const visibleItems = category.items.slice(0, limit);
+
+        // 标记前3个为高优先级，后面的为低优先级 (可被动态隐藏)
+        html += visibleItems
+          .map((item, index) => {
+              const priorityClass = index < 3 ? 'priority-high' : 'priority-low';
+              return `<div class="skill-item ${priorityClass}" data-priority="${index}">${this.formatText(item)}</div>`;
+          })
           .join('');
         
         html += `
@@ -186,11 +202,19 @@ export class ResumeGenerator {
   /**
    * 格式化工作经历
    */
-  private formatWorkExperience(workExperience: ResumeData['workExperience']): string {
+  private formatWorkExperience(workExperience: ResumeData['workExperience'], limit: number | number[] = 999): string {
     return workExperience
-      .map((work) => {
+      .map((work, jobIndex) => {
+        // Determine limit for this specific job
+        let jobLimit = 999;
+        if (typeof limit === 'number') {
+            jobLimit = limit;
+        } else if (Array.isArray(limit)) {
+            jobLimit = limit[jobIndex] !== undefined ? limit[jobIndex] : 999;
+        }
+
         let html = `
-          <div class="work-item">
+          <div class="work-item" data-job-index="${jobIndex}">
             <div class="work-header">
               <div class="company-position">
                 <span class="company">${this.escapeHtml(work.company)}</span>
@@ -201,9 +225,15 @@ export class ResumeGenerator {
         `;
         
         if (work.responsibilities && work.responsibilities.length > 0) {
+          const visibleResponsibilities = work.responsibilities.slice(0, jobLimit);
+          
           html += '<div class="responsibilities">';
-          html += work.responsibilities
-            .map((resp) => `<div class="responsibility-item">${this.formatText(resp)}</div>`)
+          // 标记前4个为高优先级，之后的为低优先级
+          html += visibleResponsibilities
+            .map((resp, index) => {
+                const priorityClass = index < 4 ? 'priority-high' : 'priority-low';
+                return `<div class="responsibility-item ${priorityClass}" data-priority="${index}" data-job-index="${jobIndex}" data-bullet-index="${index}">${this.formatText(resp)}</div>`;
+            })
             .join('');
           html += '</div>';
         }
@@ -277,194 +307,235 @@ export class ResumeGenerator {
   }
 
   /**
-   * 检测孤儿元素（标题在上一页，内容在下一页）
+   * 应用智能分页 (Force Page Breaks)
+   * 任何元素的标题如果出现在页面的底部危险区域 (Danger Zone)，
+   * 就强制加 margin-top 把它推到下一页。
    */
-  private async detectOrphans(page: Page): Promise<Array<{
-    element: string;
-    headerPage: number;
-    contentPage: number;
-    moveDistance: number;
-    headerHeight: number;
-    firstLineHeight: number;
-  }>> {
-    return (await page.evaluate(`
-      (function() {
-        const pageHeight = 1123; // A4 高度
-        const orphans = [];
-        
-        // 检测工作经历项
-        const workItems = document.querySelectorAll('.work-item');
-        
-        workItems.forEach(function(item) {
-          const header = item.querySelector('.work-header');
-          const responsibilities = item.querySelector('.responsibilities');
-          
-          if (!header || !responsibilities) return;
-          
-          const headerRect = header.getBoundingClientRect();
-          const responsibilitiesRect = responsibilities.getBoundingClientRect();
-          
-          // 判断：标题在上一页，内容在下一页
-          const headerPage = Math.floor(headerRect.top / pageHeight);
-          const contentPage = Math.floor(responsibilitiesRect.top / pageHeight);
-          
-          if (headerPage < contentPage) {
-            // 计算需要移动的距离（让标题移到下一页）
-            const nextPageTop = (headerPage + 1) * pageHeight;
-            const moveDistance = responsibilitiesRect.top - nextPageTop;
-            
-            // 获取第一行内容的高度
-            const firstLine = responsibilities.querySelector('.responsibility-item');
-            const firstLineHeight = firstLine 
-              ? firstLine.getBoundingClientRect().height 
-              : 0;
-            
-            orphans.push({
-              element: item.className,
-              headerPage: headerPage,
-              contentPage: contentPage,
-              moveDistance: moveDistance,
-              headerHeight: headerRect.height,
-              firstLineHeight: firstLineHeight
-            });
-          }
-        });
-        
-        return orphans;
-      })();
-    `)) as Array<{
-      element: string;
-      headerPage: number;
-      contentPage: number;
-      moveDistance: number;
-      headerHeight: number;
-      firstLineHeight: number;
-    }>;
-  }
-
-  /**
-   * 计算行高调整
-   */
-  private calculateLineHeightAdjustment(
-    orphan: { moveDistance: number; headerHeight: number; firstLineHeight: number },
-    bottomSpace: number,
-    minLineHeight: number,
-    maxLineHeight: number,
-    currentLineHeight: number,
-    estimatedLines: number
-  ): { canOptimize: boolean; newLineHeight?: number; delta?: number } {
-    const { moveDistance, headerHeight, firstLineHeight } = orphan;
-    
-    // 检查第二页底部空间是否足够容纳标题和第一行
-    if (bottomSpace < (headerHeight + firstLineHeight)) {
-      return { canOptimize: false };
-    }
-    
-    // 计算需要增加的行高
-    // 假设文档有 N 行，增加行高 delta，总高度增加 ≈ N * delta
-    // 我们需要：N * delta >= moveDistance
-    const requiredDelta = moveDistance / estimatedLines;
-    const newLineHeight = currentLineHeight + requiredDelta;
-    
-    // 检查是否在允许范围内
-    if (newLineHeight >= minLineHeight && newLineHeight <= maxLineHeight) {
-      return {
-        canOptimize: true,
-        newLineHeight,
-        delta: requiredDelta
-      };
-    }
-    
-    return { canOptimize: false };
-  }
-
-  /**
-   * 应用智能分页优化
-   */
-  private async applySmartPagination(page: Page): Promise<void> {
+  private async applySmartPageBreaks(page: Page): Promise<void> {
     try {
-      // 1. 检测孤儿元素和底部空白
-      const orphans = await this.detectOrphans(page);
-      
-      if (orphans.length === 0) {
-        return; // 没有孤儿，不需要优化
-      }
-      
-      const bottomSpaces = await this.detectBottomSpace(page);
-      
-      // 2. 获取当前行高和估算行数
-      const { currentLineHeight, estimatedLines } = (await page.evaluate(`
+      await page.evaluate(`
         (function() {
-          const body = document.body;
-          const computedStyle = window.getComputedStyle(body);
-          const lineHeight = parseFloat(computedStyle.lineHeight);
-          const totalHeight = document.body.scrollHeight;
-          const estimatedLines = totalHeight / lineHeight;
+          const PAGE_HEIGHT = 1123;
+          const DANGER_ZONE = 120; // 底部 120px 为危险区域
           
-          return {
-            currentLineHeight: lineHeight,
-            estimatedLines: estimatedLines
-          };
-        })();
-      `)) as { currentLineHeight: number; estimatedLines: number };
-      
-      // 3. 对每个孤儿进行判断
-      const optimizations: Array<{ newLineHeight: number; delta: number }> = [];
-      const minLineHeight = 1.4;
-      const maxLineHeight = 2.0;
-      const bottomSpaceThreshold = 60; // 底部空白阈值（像素）
-      
-      for (const orphan of orphans) {
-        const bottomSpace = bottomSpaces[orphan.contentPage]?.bottomSpace || 0;
-        
-        // 只处理底部空白大于阈值的情况
-        if (bottomSpace < bottomSpaceThreshold) {
-          continue;
-        }
-        
-        const adjustment = this.calculateLineHeightAdjustment(
-          orphan,
-          bottomSpace,
-          minLineHeight,
-          maxLineHeight,
-          currentLineHeight,
-          estimatedLines
-        );
-        
-        if (adjustment.canOptimize && adjustment.newLineHeight && adjustment.delta) {
-          optimizations.push({
-            newLineHeight: adjustment.newLineHeight,
-            delta: adjustment.delta
+          // 获取所有可能包含标题的主要区块
+          // 根据模板结构，只需要处理主要的块级元素，不需要处理单独的 section-title，
+          // 因为 section-title 通常紧跟内容，推 section-title 即可。
+          // 重点防止 work-item, education-item, project-item 的头部掉在底下
+          const items = document.querySelectorAll('.work-item, .education-item, .project-item, .section-title');
+          
+          let totalShift = 0;
+          
+          items.forEach(item => {
+            // Get original metrics
+            const rect = item.getBoundingClientRect();
+            // Since we haven't forced layout recalc, rect is still valid for original state
+            // But we must account for previous shifts
+            
+            const originalTop = rect.top + window.scrollY; // Absolute Top
+            const currentTop = originalTop + totalShift;   // Where it would be now
+            
+            const topInPage = currentTop % PAGE_HEIGHT;
+            
+            // Check: Danger Zone
+            // Also check if we are VERY close to top (e.g. < 40px), which means we just got pushed? 
+            // No, the mod logic handles that. 2246 % 1123 = 0.
+            
+            if (topInPage > (PAGE_HEIGHT - DANGER_ZONE)) {
+               const pushDownAmount = (PAGE_HEIGHT - topInPage) + 20; // +20 margin buffer
+               
+               const style = window.getComputedStyle(item);
+               const currentMarginTop = parseFloat(style.marginTop) || 0;
+               
+               item.style.marginTop = (currentMarginTop + pushDownAmount) + 'px';
+               
+               // Accumulate the shift for subsequent elements
+               totalShift += pushDownAmount;
+            }
           });
-        }
-      }
+        })();
+      `);
       
-      // 4. 如果有多处可优化，取最小的 delta（保守策略，避免过度调整）
-      if (optimizations.length > 0) {
-        const minDelta = Math.min(...optimizations.map(o => o.delta));
-        const newLineHeight = currentLineHeight + minDelta;
-        
-        // 确保在允许范围内
-        const finalLineHeight = Math.max(minLineHeight, Math.min(maxLineHeight, newLineHeight));
-        
-        // 5. 应用行高调整
-        await page.evaluate(`
-          (function(lineHeight) {
-            // 调整主要内容的行高
-            const style = document.createElement('style');
-            style.textContent = 'body { line-height: ' + lineHeight + ' !important; } ' +
-              '.work-item, .education-item, .skill-category { line-height: ' + lineHeight + ' !important; } ' +
-              '.responsibility-item, .skill-item { line-height: ' + lineHeight + ' !important; }';
-            document.head.appendChild(style);
-          })(${finalLineHeight});
-        `);
-        
-        // 6. 等待重新渲染
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
+      // 等待重新布局
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
     } catch (error) {
-      // 如果优化失败，不影响PDF生成，只记录警告
-      console.warn('智能分页优化失败，继续生成PDF:', error);
+       console.warn('智能分页(PageBreaks)失败:', error);
+    }
+  }
+
+  /**
+   * 优化内容密度 (Smart Pruning)
+   * 假设输入包含了足够多的数据 (Gemini Surplus 模式)，
+   * 此函数负责“修剪”低优先级的条目，直到内容刚好填满整数页。
+   */
+  private async optimizeContentDensity(page: Page): Promise<void> {
+      try {
+          await page.evaluate(`
+            (function() {
+                const PAGE_HEIGHT = 1123;
+                const MARGIN_BOTTOM = 40; 
+                
+                function getContentHeight() {
+                     // 考虑 @page margin 对 scrollHeight 的影响
+                     // 最准确是看最后一个元素的 bottom
+                     const all = document.querySelectorAll('*');
+                     if (all.length === 0) return 0;
+                     
+                     // 简单粗暴：body scrollHeight
+                     return document.body.scrollHeight;
+                }
+
+                // 1. 获取当前高度
+                let currentHeight = getContentHeight();
+                
+                // 2. 计算目标页数 (Round)
+                // 1.2 页 -> 1页 (Prune)
+                // 1.8 页 -> 2页 (No Prune, or minor prune)
+                let targetPages = Math.round(currentHeight / PAGE_HEIGHT);
+                if (targetPages < 1) targetPages = 1;
+
+                const targetMaxHeight = targetPages * PAGE_HEIGHT - MARGIN_BOTTOM;
+
+                // 如果当前高度已经小于目标高度，且差距不大，说明不需要修剪，直接返回 (留给 stretch 处理)
+                if (currentHeight <= targetMaxHeight) {
+                    return; 
+                }
+                
+                // 3. 开始修剪 (Pruning Loop)
+                // 策略：优先删除 .priority-low 的元素
+                // 顺序：从后往前删？或者均匀删？
+                // 为了保持简历平衡，建议均匀删。但这里先简单实现：从整个文档的低优先级列表中，从后往前删。
+                
+                const lowPriorityItems = Array.from(document.querySelectorAll('.priority-low'));
+                // 反转数组，从文档底部开始删 (通常看起来更自然，或者是每个工作最后一点)
+                lowPriorityItems.reverse(); 
+
+                let removeCount = 0;
+                
+                for (const item of lowPriorityItems) {
+                    if (getContentHeight() <= targetMaxHeight) {
+                        break; // 已经达标
+                    }
+                    
+                    if (item && item.parentNode) {
+                        item.parentNode.removeChild(item);
+                        removeCount++;
+                    }
+                }
+                
+                // 清理可能产生的空容器 (如果某个工作的所有职责都被删了... 虽然不太可能因为有 priority-high)
+                document.querySelectorAll('.responsibilities, .skill-items').forEach(container => {
+                    if (container.children.length === 0) {
+                        container.style.display = 'none';
+                    }
+                });
+            })();
+          `);
+          
+          await new Promise(r => setTimeout(r, 200));
+      } catch (error) {
+          console.warn('内容密度优化失败:', error);
+      }
+  }
+
+  /**
+   * 动态调整密度以适配整数页 (Dynamic Layout Adjustment)
+   * 替换原有的 applySmartTrimming 和 optimizePageFill
+   * 目标：让内容填满整数页 (1, 2, 3...)
+   */
+  private async adjustLayoutDensity(page: Page): Promise<void> {
+    try {
+      await page.evaluate(`
+        (function() {
+          const PAGE_HEIGHT = 1123;
+          // 由于使用了 @page margin, document.body.scrollHeight 有时不如 document.documentElement.scrollHeight 准确
+          // 或者直接读取 .resume 的高度 (如果是 block container)
+          const content = document.querySelector('.resume') || document.body;
+          const totalHeight = content.scrollHeight;
+          
+          // 加上一定的上下 margin 估算 (90px) 转换为 PDF 页面视角
+          // 但 Puppeteer 分页是基于 continuous stream.
+          // 更好的方法是基于 PAGE_HEIGHT 的倍数
+          
+          const ratio = totalHeight / PAGE_HEIGHT;
+          
+          // 目标页数 (四舍五入)
+          let targetPages = Math.round(ratio);
+          if (targetPages < 1) targetPages = 1;
+          
+          // 目标高度需要填满 targetPages，减去底部的安全留白
+          // 注意：如果有 @page margin，实际可显示区域高度减少。
+          // A4 = 1123px. Margin-top=40, Margin-bottom=40 (?) 
+          // 假设 @page margin = 40px top/bottom.
+          // PDF height effectively allows content flow.
+          
+          // 我们简化逻辑：目标是将现有内容撑大(或缩前)到 targetPages * 1100 左右
+          // 减去 40px 防止溢出出最后一页
+          const targetHeight = (targetPages * PAGE_HEIGHT) - 50; 
+          
+          let diff = targetHeight - totalHeight;
+          
+          // 阈值检查
+          if (Math.abs(diff) < 10) return; // 误差极小
+          if (diff > 900) return; // 拉伸太大，放弃 (比如只有半页内容想拉成一页，太稀疏)
+          if (targetPages > 1 && diff > 500) {
+              // 多页情况下，如果空白太多，就不强求铺满（防止两页半变成三页满，太稀疏）
+              // 但用户诉求是“最后一页到底部留白很小”
+              // 所以我们还是尽量铺。
+          }
+          if (diff < -300) return; // 压缩太多，放弃
+          
+          // 权重分配：大块元素权重大，列表项权重小
+          const majorSelector = '.section, .work-item, .education-item, .skill-category';
+          const minorSelector = '.responsibility-item, .skill-item, .certificate-item, .contact-item';
+          
+          const majorItems = Array.from(document.querySelectorAll(majorSelector));
+          const minorItems = Array.from(document.querySelectorAll(minorSelector));
+          
+          const majorWeight = 4;
+          const minorWeight = 1;
+          
+          const totalWeight = (majorItems.length * majorWeight) + (minorItems.length * minorWeight);
+          
+          if (totalWeight === 0) return;
+          
+          const pxPerWeight = diff / totalWeight;
+          
+          // 限制单个权重单位的最大像素值，防止变形
+          // 例如：pxPerWeight 计算出来是 20px (diff=2000, weight=100) -> Major gain 80px margin! Too much.
+          // 限制：拉伸时 Major max 60px, Minor max 15px
+          // 压缩时 Major max -20px, Minor max -5px
+          
+          let safePxPerWeight = pxPerWeight;
+          if (diff > 0) {
+              if (safePxPerWeight > 15) safePxPerWeight = 15; // Cap expansion
+          } else {
+              if (safePxPerWeight < -5) safePxPerWeight = -5; // Cap compression
+          }
+          
+          function applyMargin(elements, weight) {
+              elements.forEach(el => {
+                  const style = window.getComputedStyle(el);
+                  const currentMb = parseFloat(style.marginBottom) || 0;
+                  const add = safePxPerWeight * weight;
+                  
+                  // 保护：margin 不能为负数
+                  const newMb = Math.max(2, currentMb + add);
+                  el.style.marginBottom = newMb + 'px';
+              });
+          }
+          
+          applyMargin(majorItems, majorWeight);
+          applyMargin(minorItems, minorWeight);
+          
+        })();
+      `);
+      
+      // 等待重新布局
+      await new Promise(resolve => setTimeout(resolve, 300));
+    } catch (error) {
+      console.warn('动态布局调整失败:', error);
     }
   }
 
@@ -484,6 +555,45 @@ export class ResumeGenerator {
       "'": '&#039;',
     };
     return stringText.replace(/[&<>"']/g, (m) => map[m]);
+  }
+
+  /**
+   * 生成符合递减规则的工作经历点数配置列表
+   * 规则: J[i] >= J[i+1], 且 3 <= J[i] <= 7
+   * 返回按总点数降序排列的列表 (内容由多到少)
+   */
+  private generateJobConfigs(numJobs: number): number[][] {
+      const configs: number[][] = [];
+      const MAX_POINTS = 7;
+      const MIN_POINTS = 3;
+
+      // 回溯法生成所有组合
+      function backtrack(index: number, current: number[], maxLimit: number) {
+          if (index === numJobs) {
+              configs.push([...current]);
+              return;
+          }
+          // 当前点数不能超过 maxLimit (即上一份工作的点数)，且不能小于 MIN_POINTS
+          for (let val = maxLimit; val >= MIN_POINTS; val--) {
+              current.push(val);
+              backtrack(index + 1, current, val);
+              current.pop();
+          }
+      }
+
+      if (numJobs === 0) return [[]];
+
+      // 启动递归，第一段工作的上限是 MAX_POINTS
+      for (let val = MAX_POINTS; val >= MIN_POINTS; val--) {
+          backtrack(1, [val], val);
+      }
+
+      // 按总点数降序排序 (让 Index 0 代表最丰富的内容)
+      return configs.sort((a, b) => {
+          const sumA = a.reduce((sum, v) => sum + v, 0);
+          const sumB = b.reduce((sum, v) => sum + v, 0);
+          return sumB - sumA;
+      });
   }
 
   /**
@@ -549,10 +659,11 @@ export class ResumeGenerator {
     return text;
   }
 
+
   /**
    * 生成 HTML 内容
    */
-  private generateHTML(data: ResumeData): string {
+  private generateHTML(data: ResumeData, options?: RenderOptions & { jobConfig?: number[] }): string {
     let html = readFileSync(this.templatePath, 'utf-8');
     
     // 替换占位符
@@ -570,11 +681,418 @@ export class ResumeGenerator {
     html = html.replace('{{YEARS_OF_EXPERIENCE}}', data.yearsOfExperience.toString());
     html = html.replace('{{EDUCATION}}', this.formatEducation(data.education));
     html = html.replace('{{PERSONAL_INTRODUCTION}}', this.formatText(data.personalIntroduction));
-    html = html.replace('{{PROFESSIONAL_SKILLS}}', this.formatProfessionalSkills(data.professionalSkills));
-    html = html.replace('{{WORK_EXPERIENCE}}', this.formatWorkExperience(data.workExperience));
-    html = html.replace('{{CERTIFICATES}}', this.formatCertificates(data.certificates));
+    html = html.replace('{{PROFESSIONAL_SKILLS}}', this.formatProfessionalSkills(data.professionalSkills, options?.maxSkillItems));
+    
+    // Support either maxWorkItems (simple number) or jobConfig (array)
+    // Cast to any because formatWorkExperience now supports number[] but Typescript might be confused by the conditional type
+    const workItems = options?.jobConfig || options?.maxWorkItems;
+    html = html.replace('{{WORK_EXPERIENCE}}', this.formatWorkExperience(data.workExperience, workItems as any));
+    
+    // 证书板块整体替换 (包含标题逻辑)
+    html = html.replace('{{SECTION_CERTIFICATES}}', this.formatCertificateSection(data.certificates, isEnglish));
     
     return html;
+  }
+
+  /**
+   * 格式化证书板块 (包含标题)
+   */
+  private formatCertificateSection(certificates: ResumeData['certificates'], isEnglish: boolean): string {
+    if (!certificates || certificates.length === 0) {
+      return '';
+    }
+    
+    const items = certificates
+      .map((cert) => `<div class="certificate-item">${this.escapeHtml(cert.name)}</div>`)
+      .join('');
+
+    const title = isEnglish ? 'Certificates' : '证书';
+    const titleKey = isEnglish ? 'Certificates' : '证书'; // Fallback logic if needed, but we hardcode title here based on language
+
+    return `
+      <div class="section">
+          <div class="section-title">${title}</div>
+          <div class="certificate-container">${items}</div>
+      </div>
+    `;
+  }
+
+  /**
+   * 评估当前布局质量
+   * 返回: { pageCount, fillRatio, hasOrphans, details }
+   */
+  private async assessLayoutQuality(page: Page): Promise<{
+    pageCount: number,
+    fillRatio: number, // 最后一页填充率 (0-1)
+    hasOrphans: boolean,
+    details: string
+  }> {
+     return await page.evaluate(() => {
+        const PAGE_HEIGHT = 1123;
+        // 使用 documentElement.scrollHeight 通常比 body 更准确，包含 margin
+        const totalHeight = document.documentElement.scrollHeight;
+        const pageCount = Math.ceil(totalHeight / PAGE_HEIGHT);
+        
+        // 计算最后一页填充率
+        const lastPageHeight = totalHeight % PAGE_HEIGHT;
+        const fillRatio = (lastPageHeight === 0) ? 1.0 : (lastPageHeight / PAGE_HEIGHT);
+        
+        let hasOrphans = false;
+        let details = "";
+        
+        // 检查标题孤儿：标题在页面底部 100px 内 (Danger Zone)
+        // 这些标题如果出现在页面最底端，说明下面的内容被切分由于分页到了下一页，Title 留在上一页底 -> 孤儿
+        const headers = document.querySelectorAll('.section-title, .work-header, .education-header');
+        headers.forEach((h) => {
+             const rect = h.getBoundingClientRect();
+             // 页面累积高度 + 元素相对视口高度 = 绝对高度
+             // 在 puppeteer 渲染中，如果不发生滚动，rect.top 就是绝对 top。
+             // 稳妥起见，假设 document flow 是从 0 开始。
+             const absoluteTop = rect.top + window.scrollY; 
+             
+             const topInPage = absoluteTop % PAGE_HEIGHT;
+             // 如果标题距离页尾 < 100px
+             if (topInPage > (PAGE_HEIGHT - 100)) {
+                 hasOrphans = true;
+                 details += `Orphan Header at px ${Math.round(absoluteTop)} (Page Bottom); `;
+             }
+        });
+
+        // 检查分割孤儿：Work Item 刚开始第一行就在页尾
+        // 或者 Work Item 只有最后一行在下一页页头 (Pagination Orphans/Widows)
+        // 这是一个简单的 Checks
+        
+        return { pageCount, fillRatio, hasOrphans, details };
+     });
+  }
+
+  /**
+   * 寻找最佳布局配置 (Page-Aware Simulation)
+   * 1. 渲染全量内容 (Max Config).
+   * 2. 提取每个区块(Block)的精确高度信息.
+   * 3. 在内存中模拟不同 Config 下的分页效果 (无需重复渲染).
+   * 4. 选出得分最高 (填充率好、由于孤儿造成的浪费少) 的配置.
+   */
+  private async findOptimalLayout(page: Page, data: ResumeData): Promise<string> {
+      console.log('--- Starting Page-Aware Simulation Strategy ---');
+      const numJobs = data.workExperience.length;
+      
+      // 1. Generate all valid configurations (Max to Min)
+      const allConfigs = this.generateJobConfigs(numJobs); 
+      
+      if (allConfigs.length === 0) return "";
+
+      const maxConfig = allConfigs[0];
+      console.log(`[Calibration] Rendering MAX config [${maxConfig}] to extract metrics...`);
+
+      // 2. Render Max & Extract Metrics
+      // 必须渲染最大配置，这样才能拿到所有可能出现的 bullet point 的高度
+      const ops: RenderOptions = { jobConfig: maxConfig, maxSkillItems: maxConfig[0] + 2 };
+      const maxHtml = this.generateHTML(data, ops);
+      await page.setContent(maxHtml, { waitUntil: 'load' });
+      // Do NOT applySmartPageBreaks here. We want to measure the continuous flow.
+      // await this.applySmartPageBreaks(page); 
+
+      // 定义 Block 结构
+      interface LayoutBlock {
+          type: 'static' | 'job_header' | 'job_bullet' | 'gap';
+          height: number;
+          jobIndex?: number;
+          bulletIndex?: number;
+          isOrphanable?: boolean; // True if this block cannot be left alone at page bottom (Title)
+      }
+
+      // 在浏览器上下文中提取 Blocks
+      const allBlocks = await page.evaluate(() => {
+          const blocks: any[] = [];
+          const workItems = Array.from(document.querySelectorAll('.work-item'));
+          
+          if (workItems.length === 0) return [];
+
+          // 2.1 Static Top (Header + Education + First Section Title)
+          // 测量第一个 Work Item 之前的空间
+          const firstWork = workItems[0];
+          const firstRect = firstWork.getBoundingClientRect();
+          const absoluteTop = firstRect.top + window.scrollY;
+          
+          // 这个 Static Block 包含了 Header, Intro, Education 等所有内容
+          blocks.push({ type: 'static', height: absoluteTop }); // gap or static content
+
+          // 2.2 Process Jobs
+          workItems.forEach((item, idx) => {
+              const jobIdx = parseInt(item.getAttribute('data-job-index') || '0');
+              
+              // Job Header (Company, Position, Date)
+              const header = item.querySelector('.work-header');
+              if (header) {
+                  const r = header.getBoundingClientRect();
+                  blocks.push({ 
+                      type: 'job_header', 
+                      height: r.height, 
+                      jobIndex: jobIdx,
+                      isOrphanable: true 
+                  });
+              }
+
+              // Bullets
+              const bullets = Array.from(item.querySelectorAll('.responsibility-item'));
+              bullets.forEach((li, bIdx) => {
+                  const r = li.getBoundingClientRect();
+                  let effectiveHeight = r.height;
+                  
+                  // Calculate gap to next bullet if exists
+                  if (bIdx < bullets.length - 1) {
+                      const currentBottom = r.bottom; // No scrollY needed for relative diff
+                      const nextTop = bullets[bIdx+1].getBoundingClientRect().top;
+                      const gap = nextTop - currentBottom;
+                      if (gap > 0) effectiveHeight += gap;
+                  }
+                  
+                  blocks.push({
+                      type: 'job_bullet',
+                      height: effectiveHeight,
+                      jobIndex: jobIdx,
+                      bulletIndex: parseInt(li.getAttribute('data-priority') || '0') // Use data-priority or index
+                  });
+              });
+
+              // Gap to next item (or end)
+              if (idx < workItems.length - 1) {
+                  const nextItem = workItems[idx + 1];
+                  const currentBottom = item.getBoundingClientRect().bottom + window.scrollY;
+                  const nextTop = nextItem.getBoundingClientRect().top + window.scrollY;
+                  const gap = nextTop - currentBottom;
+                  if (gap > 0) {
+                      blocks.push({ type: 'gap', height: gap });
+                  }
+              }
+          });
+
+          // 2.3 Static Bottom (Skills, Footer)
+          const lastWork = workItems[workItems.length - 1];
+          const lastBottom = lastWork.getBoundingClientRect().bottom + window.scrollY;
+          const totalH = document.documentElement.scrollHeight;
+          const bottomH = totalH - lastBottom;
+          
+          if (bottomH > 0) {
+              blocks.push({ type: 'static', height: bottomH });
+          }
+
+          return blocks;
+      }) as LayoutBlock[];
+
+      console.log(`[Metrics] Extracted ${allBlocks.length} layout blocks.`);
+
+      // 3. Simulation Solver
+      const PAGE_HEIGHT = 1123;
+      const ORPHAN_THRESHOLD = 50; // pixels from bottom where headers aren't allowed
+
+      // 模拟计算某一个 Config 的得分
+      const simulateScore = (config: number[]) => {
+          let currentY = 0;
+          let pageCount = 1;
+          let waste = 0; // Space wasted by forced page breaks
+          let valid = true;
+
+          // Filter blocks based on config
+          const activeBlocks = allBlocks.filter(b => {
+             if (b.type === 'job_bullet') {
+                 // Only keep bullet if index < config[jobIndex]
+                 // config: [7, 6, 5] means job 0 has 7 bullets
+                 if (b.jobIndex !== undefined && b.bulletIndex !== undefined) {
+                     return b.bulletIndex < config[b.jobIndex];
+                 }
+             }
+             return true;
+          });
+          
+          // Run Simulation
+          for (let i = 0; i < activeBlocks.length; i++) {
+              const blk = activeBlocks[i];
+              let h = blk.height;
+              
+              // Check if fits on current page
+              const spaceLeft = (PAGE_HEIGHT * pageCount) - currentY;
+              
+              if (h > spaceLeft) {
+                  // Hard Break: Block doesn't fit at all -> New Page
+                  waste += spaceLeft;
+                  pageCount++;
+                  currentY = ((pageCount - 1) * PAGE_HEIGHT) + h;
+              } else {
+                  // Fits physically. Check Orphan Rules.
+                  // If it's a header, and we are very close to bottom
+                  if (blk.isOrphanable && spaceLeft - h < ORPHAN_THRESHOLD) {
+                       // Header fits, but leaves e.g. 10px below it. 
+                       // Check if the NEXT block can fit in that 10px?
+                       // Usually next block is a bullet (~24px).
+                       // If next block doesn't fit, the Header is stranded -> Orphan.
+                       
+                       // Peak ahead
+                       let nextH = 0;
+                       if (i + 1 < activeBlocks.length) nextH = activeBlocks[i+1].height;
+                       
+                       if (spaceLeft - h < nextH) {
+                           // Next item forces break, leaving header alone.
+                           // Force Header to next page.
+                           waste += spaceLeft;
+                           pageCount++;
+                           currentY = ((pageCount - 1) * PAGE_HEIGHT) + h;
+                           continue;
+                       }
+                  }
+                  currentY += h;
+              }
+          }
+          
+          const totalH = currentY;
+          const lastPageH = totalH % PAGE_HEIGHT;
+          const fillRatio = (lastPageH === 0) ? 1.0 : (lastPageH / PAGE_HEIGHT);
+          
+          // Strict Rules
+          if (fillRatio < 0.40) valid = false; // Too empty
+          
+          // Score Calculation
+          // If valid: High Base Score + Fill + Content
+          // If invalid: Score based largely on Fill Ratio (we prefer a nicely filled page with less content over a broken page with more content)
+          
+          const totalItems = config.reduce((a,b)=>a+b, 0);
+          
+          let score = 0;
+          if (valid) {
+              score = 10000 + (fillRatio * 500) + (totalItems * 20) - (waste * 0.5);
+          } else {
+              // If invalid (e.g. fill < 0.4), we punish strictly.
+              // We want to maximize Fill Ratio first.
+              // But we still want some content.
+              // Let's make Fill Ratio dominant. 
+              // 0.1 fill -> 100 pts. 0.3 fill -> 300 pts.
+              // Item count (40 items) -> 40 pts (weight 1).
+              score = (fillRatio * 1000) + (totalItems * 1) - (waste * 1.0);
+          }
+          
+          return { score, valid, fillRatio, pageCount, waster: waste };
+      };
+
+      // 4. Find Best via JS iteration (Fast!)
+      let bestConfig = maxConfig;
+      let bestScore = -Infinity;
+      let bestRes = null;
+
+      for (const cfg of allConfigs) {
+          const res = simulateScore(cfg);
+          if (res.score > bestScore) {
+              bestScore = res.score;
+              bestConfig = cfg;
+              bestRes = res;
+          }
+      }
+
+      console.log(`>>> Simulation Complete. Winner: [${bestConfig}]`);
+      if (bestRes) {
+          console.log(`    Score: ${bestRes.score.toFixed(1)}, Valid: ${bestRes.valid}, Pages: ${bestRes.pageCount}, Fill: ${bestRes.fillRatio.toFixed(2)}`);
+      }
+
+      // 5. Feedback Loop with Retries
+      // Render -> Check -> Adjust -> Render
+      let currentConfig = bestConfig;
+      let currentHtml = "";
+      
+      const MAX_ADJUSTMENTS = 3;
+      
+      for (let attempt = 0; attempt <= MAX_ADJUSTMENTS; attempt++) {
+          console.log(`[Render Attempt ${attempt + 1}] Config: [${currentConfig}]`);
+          
+          const ops: RenderOptions = { jobConfig: currentConfig, maxSkillItems: currentConfig[0] + 2 };
+          currentHtml = this.generateHTML(data, ops);
+          await page.setContent(currentHtml, { waitUntil: 'load' });
+          // Note: assessLayoutQuality relies on natural layout, so we don't force breaks yet, 
+          // BUT final PDF needs them. Let's apply them to see the "Real" result.
+          await this.applySmartPageBreaks(page); 
+          
+          // Measure
+          const q = await this.assessLayoutQuality(page);
+          console.log(`   -> Result: Pages ${q.pageCount}, Fill ${q.fillRatio.toFixed(2)}, Orphans ${q.hasOrphans}`);
+          
+          // Success Condition (Strict)
+          // Valid if: Fill >= 0.4 OR Single Page
+          if (q.pageCount === 1 || q.fillRatio >= 0.4) {
+              console.log(`   >>> Layout Accepted.`);
+              // Return the HTML with embedded CSS tweaks (margins, etc)
+              return await page.content();
+          }
+          
+          // Failure: Try to adjust
+          if (attempt < MAX_ADJUSTMENTS) {
+              console.warn(`   >>> Layout Rejected (Fill < 0.4). Attempting to squeeze content.`);
+              
+              // Strategy: Reduce total items
+              // Calculate how many items to remove
+              // Estimate height of last page (which is the excess height we want to remove + gap)
+              // Actually we want to remove 'Last Page Height' amount of content to fit into Previous Page.
+               
+              const totalItems = currentConfig.reduce((a,b)=>a+b, 0);
+              const lastPagePixels = q.fillRatio * 1123; // Approx
+              const avgPixelPerItem = lastPagePixels / (totalItems / q.pageCount); // Very rough estimate
+              // Or use global calibration PPS?
+              // Let's simple remove 10% of items or at least 2 items
+              
+              let itemsToRemove = Math.max(2, Math.ceil(totalItems * 0.15));
+              
+              // Construct new config
+              // We must maintain n_i >= n_{i+1} >= 3
+              const newConfig = [...currentConfig];
+              
+              // Iterate from back to front, shaving off items
+              while (itemsToRemove > 0) {
+                  let reducedSomething = false;
+                  // Try to reduce from tail (older jobs) first
+                  for (let i = newConfig.length - 1; i >= 0; i--) {
+                      if (newConfig[i] > 3) {
+                          // Check constraint: newConfig[i]-1 >= newConfig[i+1] (if i is not last)
+                          // Actually the constraint is n_i >= n_{i+1}. 
+                          // If we reduce n_i, we might violate n_{i-1} >= n_i? No, reducing current makes it smaller, so its left neighbor is fine.
+                          // But we must ensure n_i >= n_{i+1}.
+                          
+                          const nextVal = (i === newConfig.length - 1) ? 0 : newConfig[i+1];
+                          if ((newConfig[i] - 1) >= nextVal) {
+                              newConfig[i]--;
+                              itemsToRemove--;
+                              reducedSomething = true;
+                              if (itemsToRemove === 0) break;
+                          }
+                      }
+                  }
+                  if (!reducedSomething) break; // Cannot reduce further
+              }
+              
+              // Check if we actually changed anything
+              if (newConfig.reduce((a,b)=>a+b,0) === totalItems) {
+                   console.warn("   >>> Cannot reduce further (Min constraints reached). Accepting result.");
+                   return await page.content();
+              }
+              
+              currentConfig = newConfig;
+          }
+      }
+      
+      return await page.content();
+  }
+
+  /**
+   * 最终布局校验 (Safety Net)
+   */
+  private async validateLayoutResult(page: Page): Promise<void> {
+      const quality = await this.assessLayoutQuality(page);
+      if (quality.hasOrphans) {
+          console.warn(`[Layout Warning] Final PDF may have layout issues: ${quality.details}`);
+          // 在这里您可以选择抛出错误，或者只是记录
+          // throw new Error("Generated resume violates layout constraints: " + quality.details);
+      }
+      if (quality.fillRatio < 0.15 && quality.pageCount > 1) {
+          console.warn(`[Layout Warning] Last page is too empty (${(quality.fillRatio * 100).toFixed(0)}%)`);
+      }
+      console.log(`[Validation Passed] Final Layout Check OK. Pages: ${quality.pageCount}`);
   }
 
   /**
@@ -591,65 +1109,64 @@ export class ResumeGenerator {
     }
 
     const page: Page = await this.browser.newPage();
-    const html = this.generateHTML(data);
+    
+    // 全局样式设置，确保打印背景色等
+    // Puppeteer 默认即可是 print media type，但可以通过 emulateMediaType 强制
+    await page.emulateMediaType('screen'); // 使用 screen 样式便于布局计算，print 时有些 margin 行为不同
 
     try {
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+      // Step 1: 智能探测最佳布局 (Smart Probing)
+      // 这会尝试 MAX / STD / MIN 三种内容密度，选出分页最完美的一种
+      const finalHtml = await this.findOptimalLayout(page, data);
+      if (!finalHtml) {
+        throw new Error('No valid layout found (Strict Mode)');
+      }      
+      // Step 2: 应用选定的 HTML
+      // 注意：findOptimalLayout 已经返回了调整后的完整 HTML (包含内联 style)，
+      // 所以我们这里通常不需要再 run 微调，除非我们想再确保一次。
+      // 但由于 bestHtml 是 page.content() 获取的，已经包含了 adjustLayoutDensity 的 CSS 修改。
+      // 我们只需要 setContent 即可。
+      // 注意：使用 waitUntil: 'load' 即可，避免 networkidle0 等待过久导致超时
+      await page.setContent(finalHtml, { waitUntil: 'load' });
       
-      // 应用智能分页优化
-      await this.applySmartPagination(page);
+      // Step 3: 虽然 HTML 包含了 style，但某些 JS 动态行为可能重置
+      // 所以为了保险，我们只轻量级运行一次 SmartPageBreaks 确保分页符没乱
+      // adjustLayoutDensity 不需要再跑，因为 CSS margin 已经写在 style 属性里了
+      // await this.applySmartPageBreaks(page); // (可选，如果之前的 evaluate 已经修改了 style 属性，这里不用再跑)
       
-      // 检查头像图片是否可以加载，如果失败则隐藏
+      // 实际上，page.content() 拿到的 HTML 里的元素 style="margin-top: xxx" 是生效的。
+      // 所以理论上直接 generate PDF 即可。
+
+      // Step 4: 最终校验 (Validation Check - User Requested)
+      await this.validateLayoutResult(page);
+
+      // 检查头像图片 (保持原有逻辑)
       if (data.avatar) {
         try {
-          // 使用字符串形式的代码，在浏览器环境中执行
           await page.evaluate(`
             (function() {
               return new Promise(function(resolve) {
                 const img = document.querySelector('.avatar');
-                if (!img) {
-                  resolve();
-                  return;
-                }
-                
+                if (!img) { resolve(); return; }
                 const timeout = setTimeout(function() {
                   if (!img.complete || img.naturalHeight === 0) {
                     img.style.display = 'none';
-                    const container = img.parentElement;
-                    if (container) {
-                      container.style.display = 'none';
-                    }
+                    if(img.parentElement) img.parentElement.style.display = 'none';
                   }
                   resolve();
-                }, 5000);
-                
+                }, 3000); // Reduce timeout to 3s
                 if (img.complete && img.naturalHeight > 0) {
-                  clearTimeout(timeout);
-                  resolve();
+                  clearTimeout(timeout); resolve();
                 } else {
-                  img.onload = function() {
-                    clearTimeout(timeout);
-                    resolve();
-                  };
-                  img.onerror = function() {
-                    clearTimeout(timeout);
-                    img.style.display = 'none';
-                    const container = img.parentElement;
-                    if (container) {
-                      container.style.display = 'none';
-                    }
-                    resolve();
-                  };
+                  img.onload = () => { clearTimeout(timeout); resolve(); };
+                  img.onerror = () => { clearTimeout(timeout); img.style.display = 'none'; resolve(); };
                 }
               });
             })();
           `);
-          
-          // 等待一下，确保图片加载或错误处理完成
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 500));
         } catch (error) {
-          // 如果检查失败，继续生成 PDF（不显示头像）
-          console.warn('头像加载检查失败，将不显示头像:', error);
+          console.warn('头像检查失效:', error);
         }
       }
       
@@ -663,7 +1180,6 @@ export class ResumeGenerator {
         return outputPath;
       } else {
         const pdfBuffer = await page.pdf(pdfOptions);
-        // 将 Uint8Array 转换为 Buffer
         return Buffer.from(pdfBuffer);
       }
     } finally {

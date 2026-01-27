@@ -11,6 +11,7 @@ export interface ExperienceCalculationResult {
     supplementSegments: Array<{ startDate: string; endDate: string; years: number }>;
     allWorkExperiences: Array<{ startDate: string; endDate: string; type: 'existing' | 'supplement'; index?: number }>;
     earliestWorkDate: string;
+    seniorityThresholdDate?: string; // e.g. "2030-01" - limit for Senior/Manager titles
 }
 
 export class ExperienceCalculator {
@@ -18,206 +19,206 @@ export class ExperienceCalculator {
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth() + 1;
+        const nowStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
 
-        // 1. 计算最早可工作时间
-        let earliestWorkDate = "2018-09";
-        if (profile.educations && profile.educations.length > 0) {
-            const sortedEdus = [...profile.educations].sort((a, b) => {
-                const da = new Date(a.startDate || '2099-01');
-                const db = new Date(b.startDate || '2099-01');
-                return da.getTime() - db.getTime();
-            });
-            if (sortedEdus[0].startDate) {
-                earliestWorkDate = sortedEdus[0].startDate;
-            }
-        } else if (profile.birthday) {
-            const birthYear = parseInt(profile.birthday.split('-')[0] || "2000");
-            earliestWorkDate = `${birthYear + 18}-09`;
-        }
+        // 1. Analyze Education & Constraints
+        let careerConstraintDate = "2000-01"; // Earliest possible work start (Prepend limit)
+        let graduationDateStr = "";
 
-        // 2. 分析现有工作经历
-        let earliestStartUnix = Infinity;
-        let latestEndUnix = -Infinity;
-        let activeMonths = 0;
-
-        if (profile.workExperiences && profile.workExperiences.length > 0) {
-            profile.workExperiences.forEach(exp => {
-                const startParts = exp.startDate.split('-');
-                const sDate = new Date(parseInt(startParts[0]), parseInt(startParts[1]) - 1);
-
-                let eDate;
-                let endY, endM;
-                if (exp.endDate === '至今') {
-                    eDate = new Date(currentYear, currentMonth - 1);
-                    endY = currentYear;
-                    endM = currentMonth;
-                } else {
-                    const endParts = exp.endDate.split('-');
-                    eDate = new Date(parseInt(endParts[0]), parseInt(endParts[1]) - 1);
-                    endY = parseInt(endParts[0]);
-                    endM = parseInt(endParts[1]);
-                }
-                
-                // Track span
-                if (sDate.getTime() < earliestStartUnix) earliestStartUnix = sDate.getTime();
-                if (eDate.getTime() > latestEndUnix) latestEndUnix = eDate.getTime();
-
-                // Track active months
-                const startY = parseInt(startParts[0]);
-                const startM = parseInt(startParts[1]);
-                activeMonths += ((endY - startY) * 12 + (endM - startM));
-            });
-        }
+        // Sort educations to find Start and Graduation
+        const sortedEdus = [...(profile.educations || [])].sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
         
-        // Use decimal years for calculation precision
-        const activeYears = Math.round((activeMonths / 12) * 10) / 10;
-
-        // 3. 计算实际跨度年限 (Span Years)
-        let spanMonths = 0;
-        if (earliestStartUnix !== Infinity && latestEndUnix !== -Infinity) {
-            const firstJobStart = new Date(earliestStartUnix);
-            // Use current time as the anchor for "Experience since start"
-            const diffMillis = now.getTime() - firstJobStart.getTime();
-            spanMonths = Math.floor(diffMillis / (1000 * 60 * 60 * 24 * 30.44));
-        }
-        const spanYears = Math.floor(spanMonths / 12);
-        
-        // Base variables for reporting
-        const actualYears = spanYears; // Using Span as 'Actual' based on previous logic
-        const actualMonths = spanMonths % 12;
-        const actualExperienceText = actualMonths > 0 ? `${actualYears}年${actualMonths}个月` : `${actualYears}年`;
-
-        // 4. 解析岗位要求
-        const requiredExp = this.parseExperienceRequirement(job.experience);
-
-        // 5. 补充逻辑核心计算
-        // Logic: Deficit based on Active Years
-        const deficitYears = Math.max(0, requiredExp.min - activeYears);
-        
-        let supplementYears = 0;
-        if (deficitYears > 0) {
-            supplementYears = deficitYears;
-        }
-
-        let gapYears = 0;
-        if (latestEndUnix !== -Infinity) {
-            const gapMillis = now.getTime() - latestEndUnix;
-            const gapM = gapMillis / (1000 * 60 * 60 * 24 * 30.44);
-            if (gapM >= 3) {
-                gapYears = gapM / 12;
+        if (sortedEdus.length > 0) {
+            // Career Start constraint: University Start Date (first one)
+            if (sortedEdus[0].startDate) careerConstraintDate = sortedEdus[0].startDate;
+            
+            // Graduation Date: End Date of the first completed degree (usually Bachelor)
+            // Heuristic: Use the first one that has a valid end date
+            if (sortedEdus[0].endDate && sortedEdus[0].endDate !== '至今') {
+                graduationDateStr = sortedEdus[0].endDate;
+            } else if (sortedEdus.length > 1 && sortedEdus[1].endDate && sortedEdus[1].endDate !== '至今') {
+                graduationDateStr = sortedEdus[1].endDate;
             }
-        }
-
-        // Decision: Fill Gap?
-        if (gapYears >= 0.25) {
-            let projectedTotal = activeYears + gapYears;
-            let cap = 999;
-            if (requiredExp.max < 20 && requiredExp.max > 0) cap = requiredExp.max;
-
-            // Only fill gap if it keeps us under Cap (with slight buffer)
-            if (projectedTotal <= cap + 1) { 
-                 if (gapYears > supplementYears) {
-                    supplementYears = Math.ceil(gapYears * 10) / 10;
-                }
-            }
-        }
-
-        // Safety Cap
-        if (requiredExp.max < 20 && requiredExp.max > 0) {
-            const allowedSupplement = Math.max(0, requiredExp.max - activeYears);
-            if (supplementYears > allowedSupplement) {
-                supplementYears = allowedSupplement;
-            }
-        }
-
-        // Check Physical Cap
-        const earliestWorkDateObj = new Date(earliestWorkDate + '-01');
-        const maxPossibleMonths = (now.getTime() - earliestWorkDateObj.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
-        // Allow decimal years for physical cap to maximize filling
-        const maxPossibleYears = Math.max(0, maxPossibleMonths) / 12;
+        } 
         
-        if (activeYears < maxPossibleYears) {
-           const space = maxPossibleYears - activeYears;
-           if (supplementYears > space) {
-                supplementYears = Math.floor(space * 10) / 10;
-           }
-        } else {
-           supplementYears = 0;
+        // Fallback constraint if no education but birthday exists (e.g. 18yo)
+        if (!sortedEdus.length && profile.birthday) {
+             const birthYear = parseInt(profile.birthday.split('-')[0] || "2000");
+             careerConstraintDate = `${birthYear + 18}-01`;
         }
 
-        const needsSupplement = supplementYears > 0;
+        // Calculate Seniority Threshold (Grad + 4y)
+        // Rule: Manager/Expert titles only allowed after this date
+        let seniorityThresholdDate: string | undefined;
+        if (graduationDateStr) {
+            const parts = graduationDateStr.split('-');
+            const y = parseInt(parts[0]) + 4;
+            const m = parseInt(parts[1] || '06');
+            seniorityThresholdDate = `${y}-${String(m).padStart(2, '0')}`;
+        }
+
+        // 2. Parse Existing Experiences
+        const existingExps = (profile.workExperiences || []).map((exp, idx) => {
+            const endVal = exp.endDate === '至今' ? nowStr : exp.endDate;
+            return {
+                ...exp,
+                originalIndex: idx,
+                startUnix: new Date((exp.startDate || '2099-01') + '-01').getTime(),
+                endUnix: new Date((endVal || '1970-01') + '-01').getTime(),
+                startDateNormalized: exp.startDate,
+                endDateNormalized: endVal
+            };
+        }).sort((a, b) => a.startUnix - b.startUnix);
+
         const supplementSegments: Array<{ startDate: string; endDate: string; years: number }> = [];
+        let finalSupplementYears = 0;
 
-        // 6. 生成补充段 (Supplement Segments Generation)
-        if (needsSupplement) {
-             const segments = this.generateSegments(
-                 profile, 
-                 supplementYears, 
-                 earliestWorkDate, 
-                 currentYear, 
-                 currentMonth
-             );
-             supplementSegments.push(...segments);
-        }
-
-        // 7. Calculate Final Total Years from Timeline
-        let generatedSupplementYears = 0;
-        let minSupplementStartUnix = Infinity;
-        let maxSupplementEndUnix = -Infinity;
-
-        supplementSegments.forEach(seg => {
-            generatedSupplementYears += seg.years;
-            const segStartParts = seg.startDate.split('-');
-            const segStart = new Date(parseInt(segStartParts[0]), parseInt(segStartParts[1]) - 1).getTime();
+        // 3. Logic Branching
+        if (existingExps.length === 0) {
+            // --- Case 0: No Experience ---
+            // Rule: Supplement based on job requirements, max 2 years per segment.
+            const reqMin = this.parseExperienceRequirement(job.experience).min || 1; 
             
-            const segEndParts = seg.endDate.split('-');
-            const segEnd = new Date(parseInt(segEndParts[0]), parseInt(segEndParts[1]) - 1).getTime();
-            
-            if (segStart < minSupplementStartUnix) minSupplementStartUnix = segStart;
-            if (segEnd > maxSupplementEndUnix) maxSupplementEndUnix = segEnd;
-        });
+            // Calculate target Start Time
+            let targetStart = new Date(nowStr + '-01');
+            targetStart.setFullYear(targetStart.getFullYear() - reqMin);
 
-        // Effective Start
-        let finalEarliestStartUnix = earliestStartUnix;
-        if (minSupplementStartUnix < finalEarliestStartUnix) {
-            finalEarliestStartUnix = minSupplementStartUnix;
-        }
+            // Enforce Constraint
+            const constraint = new Date(careerConstraintDate + '-01');
+            if (targetStart < constraint) targetStart = constraint;
 
-        // Effective End
-        let finalLatestEndUnix = latestEndUnix;
-        // Logic: if we have supplement segments ending LATER than latest actual, update end.
-        // Usually gap filling does this.
-        if (maxSupplementEndUnix > finalLatestEndUnix && activeMonths > 0) {
-             finalLatestEndUnix = maxSupplementEndUnix;
-        }
+            // Generate chunks from targetStart to Now
+            let cursor = new Date(targetStart);
+            const nowTime = new Date(nowStr + '-01').getTime();
 
-        let finalTotalYears = 0;
-        if (finalEarliestStartUnix !== Infinity && finalLatestEndUnix !== -Infinity) {
-            const diffMillis = finalLatestEndUnix - finalEarliestStartUnix;
-            const val = Math.max(0, diffMillis);
-            finalTotalYears = Math.floor(val / (1000 * 60 * 60 * 24 * 30.44) / 12 * 10) / 10;
+            // Safety loop limit
+            let loopLimit = 0;
+            while (cursor.getTime() < nowTime && loopLimit < 10) {
+                loopLimit++;
+                // Max 2 years per segment
+                let end = new Date(cursor);
+                end.setFullYear(end.getFullYear() + 2);
+                
+                // Cap at now
+                if (end.getTime() > nowTime) {
+                    end = new Date(nowTime);
+                } 
+
+                const sStr = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
+                // Avoid overlap if making multiple? 
+                // Let's assume contiguous.
+                // End date is inclusive in visualization usually.
+                // Next start is next month.
+                
+                // However, calcYears logic uses diff.
+                // Let's set end date of *this segment*.
+                const eStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}`;
+                
+                const y = this.calcYears(sStr, eStr);
+                if (y > 0) {
+                    supplementSegments.push({ startDate: sStr, endDate: eStr, years: y });
+                }
+
+                // Advance cursor for next segment
+                cursor = new Date(end);
+                // cursor.setMonth(cursor.getMonth() + 1); // If we want gap? No, continuous.
+                // If continuous, next start is same as this end? No, next month.
+                // If i worked until 2022-01, next job starts 2022-02.
+                // But if I split one big 4y block into two 2y blocks?
+                // Job A: 2020-01 to 2022-01. Job B: 2022-01 to 2024-01?
+                // Overlap 1 month is fine for logic usually.
+            }
         } else {
-             // Fallback
-             finalTotalYears = actualYears + generatedSupplementYears;
+            // --- User Has Experience ---
+
+            // 3.1 Intermediate Gaps (Rule 2.1: Gap >= 6 months)
+            for (let i = 0; i < existingExps.length - 1; i++) {
+                const curr = existingExps[i];
+                const next = existingExps[i+1];
+                
+                // Gap between curr.end and next.start
+                // Gap starts curr.end + 1 month
+                // Gap ends next.start - 1 month
+                const gapStart = new Date(curr.endUnix);
+                gapStart.setMonth(gapStart.getMonth() + 1);
+                
+                const gapEnd = new Date(next.startUnix);
+                gapEnd.setMonth(gapEnd.getMonth() - 1);
+
+                const gapMonths = (gapEnd.getTime() - gapStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+                
+                if (gapMonths >= 6) { // Half year
+                    const sStr = `${gapStart.getFullYear()}-${String(gapStart.getMonth() + 1).padStart(2, '0')}`;
+                    const eStr = `${gapEnd.getFullYear()}-${String(gapEnd.getMonth() + 1).padStart(2, '0')}`;
+                    const y = this.calcYears(sStr, eStr);
+                    supplementSegments.push({ startDate: sStr, endDate: eStr, years: y });
+                }
+            }
+
+            // 3.2 Trailing Gap (Rule 2.2: Last -> Now >= 6 months)
+            const last = existingExps[existingExps.length - 1];
+            // Gap starts last.end + 1 month
+            const trailingStart = new Date(last.endUnix);
+            trailingStart.setMonth(trailingStart.getMonth() + 1);
+            
+            // Gap ends Now
+            const trailingEnd = new Date(nowStr + '-01');
+            
+            const trailingGapMonths = (trailingEnd.getTime() - trailingStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+            
+            if (trailingGapMonths >= 6) {
+                const sStr = `${trailingStart.getFullYear()}-${String(trailingStart.getMonth() + 1).padStart(2, '0')}`;
+                const eStr = nowStr; 
+                const y = this.calcYears(sStr, eStr);
+                supplementSegments.push({ startDate: sStr, endDate: eStr, years: y });
+            }
+
+            // 3.3 Prepend (Rule 2.3 & 2.4)
+            // Calculate Total Effective Years so far (Earliest Existing Start -> Now)
+            const firstExistingStart = new Date(existingExps[0].startUnix);
+            const totalSpanMonths = (now.getTime() - firstExistingStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+            const totalSpanYears = totalSpanMonths / 12;
+
+            const reqMin = this.parseExperienceRequirement(job.experience).min || 0;
+
+            if (totalSpanYears < reqMin && reqMin > 0) {
+                // Rule 2.3: Need to prepend
+                const missingYears = reqMin - totalSpanYears;
+                
+                // Calculate Prepend Start
+                let prependStart = new Date(firstExistingStart);
+                prependStart.setMonth(prependStart.getMonth() - Math.ceil(missingYears * 12));
+                
+                // Apply Constraint (Uni Start / 18yo)
+                const constraint = new Date(careerConstraintDate + '-01');
+                if (prependStart < constraint) {
+                    prependStart = constraint;
+                }
+
+                // Prepend End = First Existing Start - 1 month
+                const prependEnd = new Date(firstExistingStart);
+                prependEnd.setMonth(prependEnd.getMonth() - 1);
+
+                if (prependStart < prependEnd) {
+                    const sStr = `${prependStart.getFullYear()}-${String(prependStart.getMonth() + 1).padStart(2, '0')}`;
+                    const eStr = `${prependEnd.getFullYear()}-${String(prependEnd.getMonth() + 1).padStart(2, '0')}`;
+                    const y = this.calcYears(sStr, eStr);
+                    supplementSegments.push({ startDate: sStr, endDate: eStr, years: y });
+                }
+            }
         }
-        
-        // Final sanity update for supplementYears to match generated
-        const finalSupplementYears = generatedSupplementYears;
 
-
-        // 8. Build Full Timeline
+        // 4. Build Result
         const allWorkExperiences: Array<{ startDate: string; endDate: string; type: 'existing' | 'supplement'; index?: number }> = [];
 
-        if (profile.workExperiences) {
-            profile.workExperiences.forEach((exp, idx) => {
-                allWorkExperiences.push({
-                    startDate: exp.startDate,
-                    endDate: exp.endDate === '至今' ? `${currentYear}-${String(currentMonth).padStart(2, '0')}` : exp.endDate,
-                    type: 'existing',
-                    index: idx
-                });
+        existingExps.forEach(exp => {
+            allWorkExperiences.push({
+                startDate: exp.startDate,
+                endDate: exp.endDate,
+                type: 'existing',
+                index: exp.originalIndex
             });
-        }
+        });
         
         supplementSegments.forEach(seg => {
             allWorkExperiences.push({
@@ -227,27 +228,40 @@ export class ExperienceCalculator {
             });
         });
         
+        // Sort: Newest First
         allWorkExperiences.sort((a, b) => {
             const dateA = new Date(a.startDate + '-01').getTime();
             const dateB = new Date(b.startDate + '-01').getTime();
-            return dateB - dateA;
+            return dateB - dateA; // Descending
         });
 
-        // Use spanMonths for 'totalMonths' field if that's what was intended
-        // But the variable name 'totalMonths' in original code was derived from Span.
-        const returnedTotalMonths = spanMonths; 
+        // Final Total Years Calculation: Earliest of ALL starts -> Now
+        let finalEarliest = Infinity;
+        allWorkExperiences.forEach(exp => {
+            const d = new Date(exp.startDate + '-01').getTime();
+            if (d < finalEarliest) finalEarliest = d;
+        });
+
+        let finalTotalYears = 0;
+        if (finalEarliest !== Infinity) {
+             const diff = now.getTime() - finalEarliest;
+             finalTotalYears = Math.floor(diff / (1000 * 60 * 60 * 24 * 365) * 10) / 10;
+        }
+
+        finalSupplementYears = supplementSegments.reduce((acc, cur) => acc + cur.years, 0);
 
         return {
-            actualYears,
-            actualExperienceText,
-            totalMonths: returnedTotalMonths,
-            requiredExp,
-            needsSupplement,
+            actualYears: 0, 
+            actualExperienceText: `${finalTotalYears}年`, 
+            totalMonths: Math.floor(finalTotalYears * 12),
+            requiredExp: this.parseExperienceRequirement(job.experience),
+            needsSupplement: supplementSegments.length > 0,
             supplementYears: finalSupplementYears,
             finalTotalYears,
             supplementSegments,
             allWorkExperiences,
-            earliestWorkDate
+            earliestWorkDate: careerConstraintDate,
+            seniorityThresholdDate
         };
     }
 
@@ -269,164 +283,10 @@ export class ExperienceCalculator {
         return { min: 0, max: 999 };
     }
 
-    private static generateSegments(
-        profile: ResumeProfile, 
-        targetSupplementYears: number, 
-        earliestWorkDate: string,
-        currentYear: number,
-        currentMonth: number
-    ): Array<{ startDate: string; endDate: string; years: number }> {
-        const supplementSegments: Array<{ startDate: string; endDate: string; years: number }> = [];
-        
-        // Identify Gap Positions for insertion
-        const insertPositions: Array<{ afterEnd: string; beforeStart: string; gapMonths: number }> = [];
-        const sortedExistingExps = [...(profile.workExperiences || [])].sort((a, b) => {
-             const dateA = new Date(a.startDate + '-01').getTime();
-             const dateB = new Date(b.startDate + '-01').getTime();
-             return dateA - dateB; // Ascending
-        });
-
-        if (sortedExistingExps.length > 0) {
-             // Earliest job start for prepending logic
-             // Internal Gaps
-             for (let i = 0; i < sortedExistingExps.length - 1; i++) {
-                 const currentExp = sortedExistingExps[i];
-                 const nextExp = sortedExistingExps[i + 1];
-                 
-                 const currentEnd = currentExp.endDate === '至今' 
-                    ? `${currentYear}-${String(currentMonth).padStart(2, '0')}` 
-                    : currentExp.endDate;
-                 const nextStart = nextExp.startDate;
-                 
-                 const endDate = new Date(currentEnd + '-01');
-                 const startDate = new Date(nextStart + '-01');
-                 // Fix: Gap month calculation
-                 const gapMonths = (startDate.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
-                 
-                 if (gapMonths >= 4) {
-                     insertPositions.push({
-                         afterEnd: currentEnd,
-                         beforeStart: nextStart,
-                         gapMonths: Math.floor(gapMonths)
-                     });
-                 }
-             }
-
-             // Trailing Gap
-             const lastExp = sortedExistingExps[sortedExistingExps.length - 1];
-             if (lastExp && lastExp.endDate !== '至今') {
-                 const lastEnd = lastExp.endDate;
-                 // Logic for Gap Filling: "Now"
-                 let nextMonthVal = currentMonth + 1;
-                 let nextYearVal = currentYear;
-                 if (nextMonthVal > 12) { nextMonthVal = 1; nextYearVal++; }
-                 const effectiveNowStr = `${nextYearVal}-${String(nextMonthVal).padStart(2, '0')}`;
-                 
-                 const endDate = new Date(lastEnd + '-01');
-                 const startDate = new Date(effectiveNowStr + '-01');
-                 const gapMonths = (startDate.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
-                 
-                 if (gapMonths >= 3) {
-                     insertPositions.unshift({
-                         afterEnd: lastEnd,
-                         beforeStart: effectiveNowStr,
-                         gapMonths: Math.floor(gapMonths)
-                     });
-                 }
-             }
-        }
-
-        // --- Execution ---
-        let remainingYears = targetSupplementYears;
-        
-        // 1. Fill Gaps
-        for (const pos of insertPositions) {
-            if (remainingYears <= 0) break;
-            
-            // Limit per segment? 3 years max per segment usually good.
-            const availableYears = Math.min(remainingYears, pos.gapMonths / 12, 3);
-            
-            if (availableYears >= 0.5) {
-                const endDate = new Date(pos.beforeStart + '-01');
-                endDate.setMonth(endDate.getMonth() - 1); 
-                const startDate = new Date(endDate);
-                startDate.setFullYear(startDate.getFullYear() - Math.floor(availableYears));
-                
-                 // Bound check against prev segment
-                const prevEndDate = new Date(pos.afterEnd + '-01');
-                if (startDate < prevEndDate) {
-                    startDate.setTime(prevEndDate.getTime());
-                    startDate.setMonth(startDate.getMonth() + 1);
-                }
-                
-                // Construct Date Strings
-                const startStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`;
-                const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}`;
-                
-                const actualMonths = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
-                // Allow decimal years (1 decimal place)
-                const actualYearsForSegment = Math.round((actualMonths / 12) * 10) / 10;
-                
-                if (actualYearsForSegment > 0) {
-                     supplementSegments.push({
-                         startDate: startStr,
-                         endDate: endStr,
-                         years: actualYearsForSegment
-                     });
-                     remainingYears -= actualYearsForSegment;
-                }
-            }
-        }
-
-        // 2. Prepend (if still remaining)
-        let currentPrependAnchor = sortedExistingExps[0]?.startDate || `${currentYear}-${currentMonth}`; // Default to now if empty?
-        
-        while (remainingYears > 0) {
-             const segmentYears = Math.min(remainingYears, 3);
-             
-             // End date is 1 month before anchor
-             const endDate = new Date(currentPrependAnchor + '-01');
-             endDate.setMonth(endDate.getMonth() - 1);
-             
-             const startDate = new Date(endDate);
-             // Use month subtraction for precision
-             startDate.setMonth(startDate.getMonth() - Math.floor(segmentYears * 12));
-             
-             // Check Physical Cap
-             const earliestWorkDateObj = new Date(earliestWorkDate + '-01');
-             if (startDate < earliestWorkDateObj) {
-                 // Hit the physical limit (start of career)
-                 startDate.setTime(earliestWorkDateObj.getTime());
-                 // Since we hit the start, we cannot go back further. 
-                 // Whatever chunk we get here is the last one.
-                 remainingYears = 0;
-             } else {
-                 remainingYears -= segmentYears;
-             }
-             
-             const startStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`;
-             const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}`;
-             
-             const actualM = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
-             // Allow decimal years
-             const actualY = Math.round((actualM / 12) * 10) / 10;
-             
-             if (actualY > 0) {
-                supplementSegments.push({
-                    startDate: startStr,
-                    endDate: endStr,
-                    years: actualY
-                });
-             }
-             
-             currentPrependAnchor = startStr;
-             
-             // Safety break for loop
-             if (remainingYears <= 0.1) break;
-             // If we hit earliest work date in loop, we should rely on the check inside to break.
-             if (startDate.getTime() <= earliestWorkDateObj.getTime()) break;
-        }
-
-        return supplementSegments;
+    private static calcYears(start: string, end: string): number {
+        const s = new Date(start + '-01');
+        const e = new Date(end + '-01');
+        const diffM = (e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+        return Math.max(0, Math.round(diffM / 12 * 10) / 10);
     }
 }

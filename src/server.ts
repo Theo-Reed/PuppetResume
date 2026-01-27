@@ -108,6 +108,21 @@ app.post('/api/generate', async (req: MulterRequest, res: Response) => {
       return res.status(500).json({ error: '数据库未就绪' });
     }
 
+    // --- Concurrent Task Check Start ---
+    const existingTask = await db.collection(COLLECTION_RESUMES).findOne({
+      _openid: openid,
+      jobId: payload.jobId,
+      status: 'processing'
+    });
+
+    if (existingTask) {
+      return res.status(409).json({
+        success: false,
+        message: '该岗位的简历还在生成中，请耐心等待，无需重复提交。'
+      });
+    }
+    // --- Concurrent Task Check End ---
+
     // --- Quota Check Start ---
     const user = await ensureUser(openid);
 
@@ -163,6 +178,7 @@ app.post('/api/generate', async (req: MulterRequest, res: Response) => {
       jobTitle_en: payload.job_data.title_english,
       company: payload.job_data.team,
       jobId: payload.jobId,
+      language: payload.language, // 保存语言偏好
       createTime: new Date(),
       resumeInfo: payload.resume_profile, // 保存快照
       jobData: payload.job_data // 保存 Job 数据快照，用于重试

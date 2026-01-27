@@ -18,12 +18,18 @@
         u {
             text-decoration: underline;
         }
+
+        /* Print Margins: Applies to every page automatically */
+        @page {
+            margin: 40px 50px;
+            size: A4;
+        }
         
         body {
             font-family: 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
             color: #333;
             line-height: 1.6;
-            padding: 40px 50px;
+            padding: 0; /* Handled by @page margin */
             background: #fff;
         }
         
@@ -146,8 +152,15 @@
             border-left: 4px solid #3498db;
             padding-left: 12px;
             margin-bottom: 20px;
+            margin-top: 35px; 
+            /* 增加默认 margin-top，确保视觉间隔。这个类是所有大标题共用的 */
         }
         
+        /* 第一个 section-title 不需要顶部边距，避免距离 header 太远 */
+        .section:first-of-type .section-title {
+             margin-top: 0;
+        }
+
         .education-item {
             margin-bottom: 20px;
         }
@@ -337,10 +350,7 @@
         </div>
         
         <!-- 证书 -->
-        <div class="section">
-            <div class="section-title">{{TITLE_CERTIFICATES}}</div>
-            {{CERTIFICATES}}
-        </div>
+        {{SECTION_CERTIFICATES}}
     </div>
 </body>
 </html>

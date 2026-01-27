@@ -14,4 +14,5 @@ export interface PromptContext {
   finalTotalYears: number;
   supplementSegments: Array<{ startDate: string; endDate: string; years: number }>;
   allWorkExperiences: Array<{ startDate: string; endDate: string; type: 'existing' | 'supplement'; index?: number }>;
+  seniorityThresholdDate?: string; // e.g. "2030-01" - limit for Senior/Manager titles
 }
