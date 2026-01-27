@@ -152,8 +152,8 @@
             border-left: 4px solid #3498db;
             padding-left: 12px;
             margin-bottom: 20px;
-            margin-top: 35px; 
-            /* 增加默认 margin-top，确保视觉间隔。这个类是所有大标题共用的 */
+            margin-top: 30px; 
+            /* 恢复为 30px 增加呼吸感 */
         }
         
         /* 第一个 section-title 不需要顶部边距，避免距离 header 太远 */
@@ -169,7 +169,7 @@
             display: flex;
             justify-content: space-between;
             align-items: baseline;
-            margin-bottom: 8px;
+            margin-bottom: 12px; /* 统一为 12px */
         }
         
         .school-name {
@@ -211,20 +211,30 @@
             font-size: 16px;
             font-weight: bold;
             color: #2c3e50;
-            margin-bottom: 10px;
+            margin-bottom: 18px; /* 增加到 18px，更接近工作经历的 20px 间距 */
         }
-        
+
+        /* Grid Container (Style will be overridden by inline style from generator) */
+        .skills-grid {
+            display: grid;
+            grid-template-columns: 1fr; /* Default fallback */
+            column-gap: 30px; 
+            row-gap: 0px; 
+        }
+
+        /* 恢复为默认列表样式（因为外层已经是两栏了） */
         .skill-items {
+            display: block;
             margin-left: 0;
         }
         
         .skill-item {
             font-size: 14px;
             color: #555;
-            margin-bottom: 6px;
-            padding-left: 20px;
+            padding-left: 20px; /* 统一为 20px */
             position: relative;
-            line-height: 1.7;
+            line-height: 1.6;
+            margin-bottom: 9px; /* 统一为 9px，与工作经历一致 */
         }
         
         .skill-item::before {
@@ -292,7 +302,7 @@
         .responsibility-item {
             font-size: 14px;
             color: #555;
-            margin-bottom: 6px;
+            margin-bottom: 9px; /* 减少 2px (从 11px 减至 9px) */
             padding-left: 20px;
             position: relative;
             line-height: 1.7;
@@ -346,7 +356,9 @@
         <!-- 专业技能 -->
         <div class="section">
             <div class="section-title">{{TITLE_SKILLS}}</div>
-            {{PROFESSIONAL_SKILLS}}
+            <div class="skills-grid">
+                {{PROFESSIONAL_SKILLS}}
+            </div>
         </div>
         
         <!-- 证书 -->

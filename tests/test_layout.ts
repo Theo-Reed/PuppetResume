@@ -29,7 +29,7 @@ const baseData: ResumeData = {
             description: "网络工程"
         }
     ],
-    personalIntroduction: "拥有 6 年后端架构与分布式平台研发经验，具备卓越的英文工作环境适应能力与跨国协作经验。本人曾深度参与美国硅谷 A 轮初创企业核心系统建设，能够流畅使用全英文进行技术方案评审与文档撰写，无缝对接全球化研发团队。",
+    personalIntroduction: "<b>资深全栈工程师</b>，拥有 6 年后端架构与分布式平台研发经验，具备卓越的英文工作环境适应能力与跨国协作经验。本人曾深度参与美国硅谷 A 轮初创企业核心系统建设，能够流畅使用全英文进行技术方案评审与文档撰写，累计交付<b>千万级用户量</b>的产品功能。<br>以及无缝对接全球化研发团队，主导了多个高并发系统的技术选型与重构工作。热衷于开源技术分享，维护有 2k+ Star 的技术博客，<b>致力于用技术创造商业价值</b>。",
     professionalSkills: [
         {
             title: "后端开发",
@@ -74,21 +74,21 @@ async function runTest() {
             position: "后端开发工程师",
             startDate: "2024-01",
             endDate: "至今",
-            responsibilities: generateResponsibilities(4, "核心架构")
+            responsibilities: generateResponsibilities(8, "核心架构")
         },
         {
             company: "广州虎牙科技有限公司",
             position: "后端开发工程师",
             startDate: "2022-02",
             endDate: "2023-12",
-            responsibilities: generateResponsibilities(4, "支付中台")
+            responsibilities: generateResponsibilities(8, "支付中台")
         },
         {
             company: "北京小米科技有限公司",
             position: "高级工程师",
             startDate: "2020-06",
             endDate: "2021-09",
-            responsibilities: generateResponsibilities(3, "网关优化")
+            responsibilities: generateResponsibilities(8, "网关优化")
         }
     ];
     await generate(generator, dataA, 'test_result_A_standard.pdf', '场景A：标准一页（无需大量裁剪）');
@@ -103,7 +103,7 @@ async function runTest() {
             position: "额外工作经历",
             startDate: "2019-01",
             endDate: "2020-05",
-            responsibilities: generateResponsibilities(5, "冗余职责")
+            responsibilities: generateResponsibilities(8, "冗余职责")
         }
     ];
     // 增加第一份工作的职责长度
@@ -134,7 +134,7 @@ async function runTest() {
             position: "不幸的工程师",
             startDate: "2020-01",
             endDate: "2020-12",
-            responsibilities: generateResponsibilities(5, "原本应该在第二页")
+            responsibilities: generateResponsibilities(8, "原本应该在第二页")
         }
     ];
     await generate(generator, dataC, 'test_result_C_orphan.pdf', '场景C：孤儿标题（标题在页底，内容在次页 -> 标题应被推至次页）');
@@ -148,7 +148,7 @@ async function runTest() {
             position: "独苗工程师",
             startDate: "2024-01",
             endDate: "至今",
-            responsibilities: generateResponsibilities(4, "孤独的职责")
+            responsibilities: generateResponsibilities(8, "孤独的职责")
         }
     ];
     await generate(generator, dataD, 'test_result_D_stretch.pdf', '场景D：内容过短（测试页面拉伸填充）');
@@ -161,7 +161,7 @@ async function runTest() {
         position: "资深架构师",
         startDate: "2020-01",
         endDate: "2024-01",
-        responsibilities: generateResponsibilities(6, "长期贡献")
+        responsibilities: generateResponsibilities(8, "长期贡献")
     };
     dataE.workExperience = [longExp, longExp, longExp, longExp, longExp]; // 5 份长工作
     await generate(generator, dataE, 'test_result_E_twopages.pdf', '场景E：明显两页（测试双页布局稳定性）');
@@ -184,28 +184,28 @@ async function runTest() {
             position: "资深技术专家",
             startDate: "2018-06",
             endDate: "2020-12",
-            responsibilities: generateResponsibilities(7, "交易核心")
+            responsibilities: generateResponsibilities(8, "交易核心")
         },
         {
             company: "未来数据驱动公司",
             position: "高级研发经理",
             startDate: "2015-03",
             endDate: "2018-05",
-            responsibilities: generateResponsibilities(6, "大数据平台")
+            responsibilities: generateResponsibilities(8, "大数据平台")
         },
         {
             company: "早期创业孵化器",
             position: "全栈工程师",
             startDate: "2013-07",
             endDate: "2015-02",
-            responsibilities: generateResponsibilities(5, "敏捷开发")
+            responsibilities: generateResponsibilities(8, "敏捷开发")
         },
         {
             company: "某大型互联网集团",
             position: "后端开发",
             startDate: "2011-07",
             endDate: "2013-06",
-            responsibilities: generateResponsibilities(4, "基础服务")
+            responsibilities: generateResponsibilities(8, "基础服务")
         }
     ];
     // 增加大量技能和证书以填充空间
@@ -227,7 +227,7 @@ async function generate(generator: ResumeGenerator, data: ResumeData, filename: 
     const outputPath = path.join(__dirname, filename);
     console.log(`\n--- 开始生成: ${desc} ---`);
     try {
-        await generator.generatePDFToFile(data, outputPath);
+        await generator.generatePDF(data, outputPath);
         console.log(`✅ 生成成功: ${filename}`);
     } catch (e) {
         console.error(`❌ 生成失败: ${filename}`, e);

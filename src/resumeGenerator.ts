@@ -4,12 +4,21 @@ import { join, dirname, extname } from 'path';
 import { ResumeData } from './types';
 
 /**
+ * 布局策略接口
+ */
+interface LayoutStrategy {
+    targetPages: number;       // 目标页数
+    skillColumns: number;      // 技能栏列数 (1, 2, 3)
+    skillCategories: number;   // 技能分类数量
+    skillItemsPerCat: number;  // 每个分类的技能点数
+}
+
+/**
  * 渲染配置选项
  */
 export interface RenderOptions {
-  maxWorkItems?: number; // 每个工作经历最多显示的条目数 (Surplus Trimming)
-  maxSkillItems?: number; // 每个技能分类最多显示的条目数
   jobConfig?: number[];   // Precise control per job
+  strategy: LayoutStrategy; // 这一步是必须的
 }
 
 export class ResumeGenerator {
@@ -26,6 +35,77 @@ export class ResumeGenerator {
     ];
     
     this.templatePath = possiblePaths.find(path => existsSync(path)) || possiblePaths[0];
+  }
+
+  /**
+   * 获取布局策略
+   */
+  private getLayoutStrategy(jobCount: number, hasCertificates: boolean): LayoutStrategy {
+      // 循环逻辑 (Cycle of 3):
+      // Page Count: Base 2, increases every 3 jobs (1-3 -> 2pg, 4-6 -> 3pg, 7-9 -> 4pg)
+      // Layout Style: Cycles every 3 jobs (1, 2, 3 pattern)
+      
+      const cycleIndex = (jobCount - 1) % 3; // 0, 1, 2
+      let strategy: LayoutStrategy;
+
+      // Determine Page Count
+      // Job 1-3: 2 Pages. Job 4-6: 3 Pages.
+      // Formula: 2 + floor((jobCount - 1) / 3)
+      const targetPages = 2 + Math.floor((jobCount - 1) / 3);
+
+      switch (cycleIndex) {
+          case 0: // Matches Job 1, 4, 7...
+              // Style: Skills 1 Col, 4 Cats, 4 Items (Certs: 3 Items)
+              strategy = {
+                  targetPages: targetPages,
+                  skillColumns: 1,
+                  skillCategories: 4,
+                  skillItemsPerCat: 4
+              };
+              if (hasCertificates) {
+                  strategy.skillItemsPerCat = 3;
+              }
+              break;
+              
+          case 1: // Matches Job 2, 5, 8...
+              // Style: Skills 2 Cols, 4 Cats, 4 Items (Certs: 3 Items)
+              strategy = {
+                  targetPages: targetPages,
+                  skillColumns: 2,
+                  skillCategories: 4,
+                  skillItemsPerCat: 4
+              };
+              if (hasCertificates) {
+                   strategy.skillItemsPerCat = 3;
+              }
+              break;
+              
+          case 2: // Matches Job 3, 6, 9...
+              // Style: Skills 2 Cols, 3 Cats, 5 Items (Certs: 4 Cats, 4 Items)
+              strategy = {
+                  targetPages: targetPages,
+                  skillColumns: 2,
+                  skillCategories: 3,
+                  skillItemsPerCat: 5
+              };
+              if (hasCertificates) {
+                  strategy.skillCategories = 4;
+                  strategy.skillItemsPerCat = 4;
+              }
+              break;
+              
+          default:
+              // Should not happen with % 3
+              strategy = {
+                  targetPages: targetPages,
+                  skillColumns: 2,
+                  skillCategories: 4,
+                  skillItemsPerCat: 4
+              };
+              break;
+      }
+      
+      return strategy;
   }
 
   /**
@@ -69,14 +149,13 @@ export class ResumeGenerator {
     let imageUrl = avatar.trim();
     
     // 更加鲁棒的路径处理：
-    // 无论是相对路径 /public/... 还是完整 URL http://.../public/...
-    // 只要包含 /public/ 且指向本地资源，我们就尝试直接读取本地文件并转换为 Base64
-    // 这样可以避免 Puppeteer 在容器/内网环境下解析 localhost 或 file:// 协议的问题
-    const publicPattern = /\/public\/(.*)/;
-    const match = imageUrl.match(publicPattern);
+    // 无论是相对路径 /public/... 或 /tests/... 还是完整 URL
+    // 只要包含 /public/ 或 /tests/ 且指向本地资源，我们就尝试直接读取本地文件并转换为 Base64
+    const localPattern = /\/(public|tests)\/(.*)/;
+    const match = imageUrl.match(localPattern);
     
     if (match) {
-        const relativePath = `public/${match[1]}`;
+        const relativePath = `${match[1]}/${match[2]}`;
         const absolutePath = join(process.cwd(), relativePath);
         if (existsSync(absolutePath)) {
             try {
@@ -165,38 +244,44 @@ export class ResumeGenerator {
   /**
    * 格式化专业技能
    */
-  private formatProfessionalSkills(skills?: ResumeData['professionalSkills'], limit: number = 999): string {
-    if (!skills || skills.length === 0) {
+  private formatProfessionalSkills(skills?: ResumeData['professionalSkills'], strategy?: LayoutStrategy): string {
+    if (!skills || skills.length === 0 || !strategy) {
       return '';
     }
     
-    return skills
+    // 使用策略进行裁剪
+    const targetCategories = skills.slice(0, strategy.skillCategories);
+
+    // 构造 Grid 样式
+    // 注意：template.html 里的 .skills-grid 默认可能是 3 列，这里我们需要内联覆盖
+    // 或者直接使用 grid-template-columns: repeat(N, 1fr)
+    const gridStyle = `grid-template-columns: repeat(${strategy.skillColumns}, 1fr);`;
+
+    let html = `<div class="skills-grid" style="${gridStyle}">`;
+    
+    html += targetCategories
       .map((category) => {
-        let html = `
+        let catHtml = `
           <div class="skill-category">
             <div class="skill-category-title">${this.escapeHtml(category.title)}</div>
-            <div class="skill-items">
         `;
         
-        // 使用 limit 进行截断
-        const visibleItems = category.items.slice(0, limit);
+        const visibleItems = category.items.slice(0, strategy.skillItemsPerCat);
 
-        // 标记前3个为高优先级，后面的为低优先级 (可被动态隐藏)
-        html += visibleItems
+        catHtml += visibleItems
           .map((item, index) => {
-              const priorityClass = index < 3 ? 'priority-high' : 'priority-low';
-              return `<div class="skill-item ${priorityClass}" data-priority="${index}">${this.formatText(item)}</div>`;
+              return `<div class="skill-item priority-high" data-priority="${index}">${this.formatText(item)}</div>`;
           })
           .join('');
         
-        html += `
-            </div>
-          </div>
-        `;
-        
-        return html;
+        catHtml += `</div>`;
+        return catHtml;
       })
       .join('');
+      
+    html += `</div>`;
+    
+    return html;
   }
 
   /**
@@ -342,15 +427,22 @@ export class ResumeGenerator {
             // No, the mod logic handles that. 2246 % 1123 = 0.
             
             if (topInPage > (PAGE_HEIGHT - DANGER_ZONE)) {
-               const pushDownAmount = (PAGE_HEIGHT - topInPage) + 20; // +20 margin buffer
+               // 改为使用 break-before: always 安全地强制换行
+               // 避免手动计算 margin-top 导致的空白间距问题
+               item.style.breakBefore = 'always';
+               // style.marginTop = ... // No longer needed
+               item.style.marginTop = '0px'; // Reset margin if any
                
-               const style = window.getComputedStyle(item);
-               const currentMarginTop = parseFloat(style.marginTop) || 0;
+               // Adjust shift? 
+               // If we force page break, the element moves to Top of Next Page.
+               // The space on previous page is left empty (natural).
+               // We don't need to track 'totalShift' for *this* element's gap, 
+               // but subsequent elements will be shifted relative to the document flow.
                
-               item.style.marginTop = (currentMarginTop + pushDownAmount) + 'px';
-               
-               // Accumulate the shift for subsequent elements
-               totalShift += pushDownAmount;
+               // Actually, calculating 'totalShift' becomes hard if we use breakBefore, 
+               // because we don't know exactly how much space was cleared.
+               // But usually, smart page breaks are applied ONCE at the end.
+               // We don't need accurate subsequent metrics if we are just patching orphans.
             }
           });
         })();
@@ -437,106 +529,6 @@ export class ResumeGenerator {
       } catch (error) {
           console.warn('内容密度优化失败:', error);
       }
-  }
-
-  /**
-   * 动态调整密度以适配整数页 (Dynamic Layout Adjustment)
-   * 替换原有的 applySmartTrimming 和 optimizePageFill
-   * 目标：让内容填满整数页 (1, 2, 3...)
-   */
-  private async adjustLayoutDensity(page: Page): Promise<void> {
-    try {
-      await page.evaluate(`
-        (function() {
-          const PAGE_HEIGHT = 1123;
-          // 由于使用了 @page margin, document.body.scrollHeight 有时不如 document.documentElement.scrollHeight 准确
-          // 或者直接读取 .resume 的高度 (如果是 block container)
-          const content = document.querySelector('.resume') || document.body;
-          const totalHeight = content.scrollHeight;
-          
-          // 加上一定的上下 margin 估算 (90px) 转换为 PDF 页面视角
-          // 但 Puppeteer 分页是基于 continuous stream.
-          // 更好的方法是基于 PAGE_HEIGHT 的倍数
-          
-          const ratio = totalHeight / PAGE_HEIGHT;
-          
-          // 目标页数 (四舍五入)
-          let targetPages = Math.round(ratio);
-          if (targetPages < 1) targetPages = 1;
-          
-          // 目标高度需要填满 targetPages，减去底部的安全留白
-          // 注意：如果有 @page margin，实际可显示区域高度减少。
-          // A4 = 1123px. Margin-top=40, Margin-bottom=40 (?) 
-          // 假设 @page margin = 40px top/bottom.
-          // PDF height effectively allows content flow.
-          
-          // 我们简化逻辑：目标是将现有内容撑大(或缩前)到 targetPages * 1100 左右
-          // 减去 40px 防止溢出出最后一页
-          const targetHeight = (targetPages * PAGE_HEIGHT) - 50; 
-          
-          let diff = targetHeight - totalHeight;
-          
-          // 阈值检查
-          if (Math.abs(diff) < 10) return; // 误差极小
-          if (diff > 900) return; // 拉伸太大，放弃 (比如只有半页内容想拉成一页，太稀疏)
-          if (targetPages > 1 && diff > 500) {
-              // 多页情况下，如果空白太多，就不强求铺满（防止两页半变成三页满，太稀疏）
-              // 但用户诉求是“最后一页到底部留白很小”
-              // 所以我们还是尽量铺。
-          }
-          if (diff < -300) return; // 压缩太多，放弃
-          
-          // 权重分配：大块元素权重大，列表项权重小
-          const majorSelector = '.section, .work-item, .education-item, .skill-category';
-          const minorSelector = '.responsibility-item, .skill-item, .certificate-item, .contact-item';
-          
-          const majorItems = Array.from(document.querySelectorAll(majorSelector));
-          const minorItems = Array.from(document.querySelectorAll(minorSelector));
-          
-          const majorWeight = 4;
-          const minorWeight = 1;
-          
-          const totalWeight = (majorItems.length * majorWeight) + (minorItems.length * minorWeight);
-          
-          if (totalWeight === 0) return;
-          
-          const pxPerWeight = diff / totalWeight;
-          
-          // 限制单个权重单位的最大像素值，防止变形
-          // 例如：pxPerWeight 计算出来是 20px (diff=2000, weight=100) -> Major gain 80px margin! Too much.
-          // 限制：拉伸时 Major max 60px, Minor max 15px
-          // 压缩时 Major max -20px, Minor max -5px
-          
-          let safePxPerWeight = pxPerWeight;
-          if (diff > 0) {
-              if (safePxPerWeight > 15) safePxPerWeight = 15; // Cap expansion
-          } else {
-              if (safePxPerWeight < -5) safePxPerWeight = -5; // Cap compression
-          }
-          
-          function applyMargin(elements, weight) {
-              elements.forEach(el => {
-                  const style = window.getComputedStyle(el);
-                  const currentMb = parseFloat(style.marginBottom) || 0;
-                  const add = safePxPerWeight * weight;
-                  
-                  // 保护：margin 不能为负数
-                  const newMb = Math.max(2, currentMb + add);
-                  el.style.marginBottom = newMb + 'px';
-              });
-          }
-          
-          applyMargin(majorItems, majorWeight);
-          applyMargin(minorItems, minorWeight);
-          
-        })();
-      `);
-      
-      // 等待重新布局
-      await new Promise(resolve => setTimeout(resolve, 300));
-    } catch (error) {
-      console.warn('动态布局调整失败:', error);
-    }
   }
 
   /**
@@ -641,6 +633,14 @@ export class ResumeGenerator {
       return key;
     });
     
+    // 处理 <br> 标签 (换行)
+    // 用户需求: "正常行再加5rpx" -> 使用 div 产生块级换行，并附加 5px 的垂直间距
+    text = text.replace(/<br\s*\/?>/gi, (match) => {
+      const key = getPlaceholder('BR');
+      placeholders[key] = '<div style="height: 5px;"></div>';
+      return key;
+    });
+
     // 转义剩余的 HTML
     text = this.escapeHtml(text);
     
@@ -681,12 +681,12 @@ export class ResumeGenerator {
     html = html.replace('{{YEARS_OF_EXPERIENCE}}', data.yearsOfExperience.toString());
     html = html.replace('{{EDUCATION}}', this.formatEducation(data.education));
     html = html.replace('{{PERSONAL_INTRODUCTION}}', this.formatText(data.personalIntroduction));
-    html = html.replace('{{PROFESSIONAL_SKILLS}}', this.formatProfessionalSkills(data.professionalSkills, options?.maxSkillItems));
+    // 传入 strategy
+    html = html.replace('{{PROFESSIONAL_SKILLS}}', this.formatProfessionalSkills(data.professionalSkills, options?.strategy));
     
-    // Support either maxWorkItems (simple number) or jobConfig (array)
-    // Cast to any because formatWorkExperience now supports number[] but Typescript might be confused by the conditional type
-    const workItems = options?.jobConfig || options?.maxWorkItems;
-    html = html.replace('{{WORK_EXPERIENCE}}', this.formatWorkExperience(data.workExperience, workItems as any));
+    // Support jobConfig (array)
+    const workItems = options?.jobConfig;
+    html = html.replace('{{WORK_EXPERIENCE}}', this.formatWorkExperience(data.workExperience, workItems));
     
     // 证书板块整体替换 (包含标题逻辑)
     html = html.replace('{{SECTION_CERTIFICATES}}', this.formatCertificateSection(data.certificates, isEnglish));
@@ -711,7 +711,7 @@ export class ResumeGenerator {
 
     return `
       <div class="section">
-          <div class="section-title">${title}</div>
+          <div class="section-title certificate-section-title">${title}</div>
           <div class="certificate-container">${items}</div>
       </div>
     `;
@@ -728,7 +728,7 @@ export class ResumeGenerator {
     details: string
   }> {
      return await page.evaluate(() => {
-        const PAGE_HEIGHT = 1123;
+        const PAGE_HEIGHT = 1040; // Adjusted for @page margins (1123 - 80)
         // 使用 documentElement.scrollHeight 通常比 body 更准确，包含 margin
         const totalHeight = document.documentElement.scrollHeight;
         const pageCount = Math.ceil(totalHeight / PAGE_HEIGHT);
@@ -774,240 +774,163 @@ export class ResumeGenerator {
    * 4. 选出得分最高 (填充率好、由于孤儿造成的浪费少) 的配置.
    */
   private async findOptimalLayout(page: Page, data: ResumeData): Promise<string> {
-      console.log('--- Starting Page-Aware Simulation Strategy ---');
-      const numJobs = data.workExperience.length;
+      // 1. 获取基础信息
+      const jobCount = data.workExperience.length;
+      const hasCertificates = !!(data.certificates && data.certificates.length > 0);
+      const numJobs = jobCount;
+
+      // 2. 获取命运确定的策略
+      const strategy = this.getLayoutStrategy(jobCount, hasCertificates);
+      const targetPages = strategy.targetPages;
+
+      console.log(`[Layout Strategy] Jobs: ${jobCount}, HasCerts: ${hasCertificates}, TargetPages: ${targetPages}, SkillCols: ${strategy.skillColumns}, SkillCats: ${strategy.skillCategories}, ItemsPerCat: ${strategy.skillItemsPerCat}`);
+
+      const PAGE_HEIGHT = 1000; 
+
+      // Step A: 渲染这个 Strategy 下的 "Max Content" (所有 job 设为 100) 以获取 Metric
+      // 注意：generateHTML 会用到 strategy，所以 metrics 里的 Professional Skills 高度将是正确的。
+      const maxConfig = new Array(numJobs).fill(100);
+      const calibOps: RenderOptions = { jobConfig: maxConfig, strategy: strategy };
+      const calibHtml = this.generateHTML(data, calibOps);
+      await page.setContent(calibHtml, { waitUntil: 'load' }); // load to render grid
       
-      // 1. Generate all valid configurations (Max to Min)
-      const allConfigs = this.generateJobConfigs(numJobs); 
+      // Step B: Extract Layout Blocks inline (Reusing existing extraction logic flow)
       
-      if (allConfigs.length === 0) return "";
-
-      const maxConfig = allConfigs[0];
-      console.log(`[Calibration] Rendering MAX config [${maxConfig}] to extract metrics...`);
-
-      // 2. Render Max & Extract Metrics
-      // 必须渲染最大配置，这样才能拿到所有可能出现的 bullet point 的高度
-      const ops: RenderOptions = { jobConfig: maxConfig, maxSkillItems: maxConfig[0] + 2 };
-      const maxHtml = this.generateHTML(data, ops);
-      await page.setContent(maxHtml, { waitUntil: 'load' });
-      // Do NOT applySmartPageBreaks here. We want to measure the continuous flow.
-      // await this.applySmartPageBreaks(page); 
-
       // 定义 Block 结构
       interface LayoutBlock {
           type: 'static' | 'job_header' | 'job_bullet' | 'gap';
           height: number;
           jobIndex?: number;
           bulletIndex?: number;
-          isOrphanable?: boolean; // True if this block cannot be left alone at page bottom (Title)
+          isOrphanable?: boolean;
+          label?: string; // Debug Label
       }
 
-      // 在浏览器上下文中提取 Blocks
+      // 在浏览器上下文中提取 Blocks (Granular)
       const allBlocks = await page.evaluate(() => {
           const blocks: any[] = [];
-          const workItems = Array.from(document.querySelectorAll('.work-item'));
           
-          // 2.1 Static Top (Header + Education + First Section Title)
-          // 测量第一个 Work Item 之前的空间
-          // If no work items, this logic is flawed, but resume usually has work.
-          let workStartTop = 0;
-          if (workItems.length > 0) {
-              const firstWork = workItems[0];
-              const firstRect = firstWork.getBoundingClientRect();
-              workStartTop = firstRect.top + window.scrollY;
-          } else {
-             // Fallback: measure until Skills or End
-             // Simplified: assume 0 if no work (edge case)
-          }
+          let currentY = 0;
           
-          if (workStartTop > 0) {
-             blocks.push({ type: 'static', height: workStartTop }); 
-          }
-
-          // 2.2 Process Jobs
-          if (workItems.length > 0) {
-            workItems.forEach((item, idx) => {
-                const jobIdx = parseInt(item.getAttribute('data-job-index') || '0');
-                
-                // Job Header (Company, Position, Date)
-                const header = item.querySelector('.work-header');
-                if (header) {
-                    const r = header.getBoundingClientRect();
-                    blocks.push({ 
-                        type: 'job_header', 
-                        height: r.height, 
-                        jobIndex: jobIdx,
-                        isOrphanable: true 
-                    });
-                }
-
-                // Bullets
-                const bullets = Array.from(item.querySelectorAll('.responsibility-item'));
-                bullets.forEach((li, bIdx) => {
-                    const r = li.getBoundingClientRect();
-                    let effectiveHeight = r.height;
-                    
-                    // Calculate gap to next bullet if exists
-                    if (bIdx < bullets.length - 1) {
-                        const currentBottom = r.bottom; 
-                        const nextTop = bullets[bIdx+1].getBoundingClientRect().top;
-                        const gap = nextTop - currentBottom;
-                        if (gap > 0) effectiveHeight += gap;
-                    }
-                    
-                    blocks.push({
-                        type: 'job_bullet',
-                        height: effectiveHeight,
-                        jobIndex: jobIdx,
-                        bulletIndex: parseInt(li.getAttribute('data-priority') || '0')
-                    });
-                });
-
-                // Gap to next item or to Bottom Section
-                // We need to be careful here. 
-                // The gap after LAST job connect to the Bottom Static Section.
-                
-                const currentRect = item.getBoundingClientRect();
-                const currentBottom = currentRect.bottom + window.scrollY;
-                
-                let nextTop = 0;
-                if (idx < workItems.length - 1) {
-                    // Gap to next job
-                    nextTop = workItems[idx + 1].getBoundingClientRect().top + window.scrollY;
-                } else {
-                    // Gap to Bottom Section (e.g. Skills Title)
-                    // The Bottom Section starts right after this work item container.
-                    // But we need to find the specific element.
-                    // The template has Work Section -> Skills Section -> Certs.
-                    // So after the last work-item, the next element is the closing of Work Section (padding?) 
-                    // or the next .section (Skills).
-                    // Actually, let's look for the next .section in document flow
-                    const workSection = item.closest('.section');
-                    if (workSection && workSection.nextElementSibling) {
-                        nextTop = workSection.nextElementSibling.getBoundingClientRect().top + window.scrollY;
-                    } else {
-                        // End of doc?
-                        nextTop = document.documentElement.scrollHeight;
-                    }
-                }
-                
-                const gap = nextTop - currentBottom;
-                if (gap > 0) {
-                    blocks.push({ type: 'gap', height: gap });
-                }
-            });
-          }
-
-          // 2.3 Static Bottom (Skills, Certificates, Footer)
-          // We need to identify these blocks separately to handle pagination correctly.
-          // Look for sections AFTER the work experience section.
-          // In template: Work Exp is in a .section. Skills is next .section. Certs is next.
+          // Helper: Add Block relative to natural flow
+          // Note: We use strict order of traversal
+          const addBlock = (el: Element, type: string, label: string, extra?: any) => {
+               const rect = el.getBoundingClientRect();
+               const top = rect.top + window.scrollY;
+               
+               if (top > currentY && currentY > 0) {
+                   const gap = top - currentY;
+                   if (gap > 1) blocks.push({ type: 'gap', height: gap, label: `Gap before ${label}` });
+               }
+               // Note: If jumping back (e.g. floats), ignore? Resume is linear.
+               
+               blocks.push({ type: type, height: rect.height, label: label, ...extra });
+               currentY = top + rect.height;
+          };
           
-          let referenceElement = null;
-           // Attempt to find the Work Experience Section
-          const sections = Array.from(document.querySelectorAll('.section'));
-          // Find the section that contains work items
-          const workSection = sections.find(s => s.querySelector('.work-item'));
+          // 1. Header
+          const header = document.querySelector('.header');
+          if (header) addBlock(header, 'static', '头部信息');
+
+          // 2. Sections Before Work (Education, Intro)
+          // We identify Work Section first
+          const allSections = Array.from(document.querySelectorAll('.section')); 
+          const workSectionIndex = allSections.findIndex(s => s.querySelector('.work-item'));
           
-          if (workSection) {
-              // Iterate over following siblings (Skills, Certs)
-              let sibling = workSection.nextElementSibling;
+          for(let i=0; i<workSectionIndex; i++) {
+              const sec = allSections[i];
+              let label = '其他模块';
+              // Check title
+              const title = sec.querySelector('.section-title')?.textContent || '';
+              if (title.includes('教育')) label = '教育经历';
+              else if (title.includes('介绍') || sec.querySelector('.personal-intro')) label = '个人介绍';
               
+              addBlock(sec, 'static', label);
+          }
+          
+          // 3. Work Section Title
+          if (workSectionIndex >= 0) {
+              const workSec = allSections[workSectionIndex];
+              const title = workSec.querySelector('.section-title');
+              if (title) {
+                 addBlock(title, 'static', '工作经历标题');
+                 // Also check gap to first job? Handled by addBlock if flow is linear.
+              }
+              
+              // 4. Work Items
+              const workItems = Array.from(workSec.querySelectorAll('.work-item'));
+              workItems.forEach((item) => {
+                  const jobIdx = parseInt(item.getAttribute('data-job-index') || '0');
+                  
+                  const h = item.querySelector('.work-header');
+                  if (h) addBlock(h, 'job_header', `工作${jobIdx+1}标题`, { jobIndex: jobIdx, isOrphanable: true });
+                  
+                  const bullets = Array.from(item.querySelectorAll('.responsibility-item'));
+                  bullets.forEach((li) => {
+                       const p = parseInt(li.getAttribute('data-priority') || '0');
+                       addBlock(li, 'job_bullet', `工作${jobIdx+1}小点`, { jobIndex: jobIdx, bulletIndex: p });
+                  });
+              });
+              
+              // 5. Check if next siblings exist (Skills, Certs)
+              let sibling = workSec.nextElementSibling;
               while (sibling) {
-                   const rect = sibling.getBoundingClientRect();
-                   const h = rect.height;
-                   // Get margin top? 
-                   const style = window.getComputedStyle(sibling);
-                   const mt = parseFloat(style.marginTop) || 0;
-                   const mb = parseFloat(style.marginBottom) || 0;
-                   
-                   // The Gap calculation in 2.2 already covers the gap from Last Work Item to the TOP of the next section (including margin).
-                   // NO, 2.2 calculates gap from Last Job BOttom to Next Section Top. So margin is effectively included in gap.
-                   // So here we just push the content height.
-                   // Actually, we should push (height + marginBottom).
-                   // But be careful about collapsing margins.
-                   // For safety, let's use bounding box height (includes padding/border) + margin bottom.
-                   
-                   // Wait, 2.2 calculated gap to `sibling.top`.
-                   // So we start from `sibling.top`.
-                   // Height = rect.height.
-                   // Then gap to next...
-                   
-                   blocks.push({ type: 'static', height: h, isOrphanable: true }); // Treat whole section as unbreakble for now? 
-                   // Ideally spread skill-items? But user demands 4x4 fixed. So 16 items.
-                   // Usually Skills section is allowed to break. 
-                   // But breaking inside a skill grid is ugly.
-                   // Breaking BETWEEN skill categories is fine.
-                   // Since we don't control skill-bullet count (it's fixed 4x4), we treat them as static blocks.
-                   // But if it's huge, we better split it.
-                   
-                   // Check if it's Skills section
                    if (sibling.querySelector('.skill-category')) {
-                       // It's the big skills block. Split it!
-                       // Remove the block used added above, and add sub-blocks
-                       blocks.pop(); 
+                       // Skills
+                       const t = sibling.querySelector('.section-title');
+                       if (t) addBlock(t, 'static', '专业技能标题');
                        
-                       const title = sibling.querySelector('.section-title');
-                       if (title) {
-                           blocks.push({ type: 'static', height: title.getBoundingClientRect().height + 20 }); // +margin
+                       // 检测是否使用了网格布局
+                       const grid = sibling.querySelector('.skills-grid');
+                       if (grid) {
+                           // 将整个 Skill Grid 视为一个大的静态块
+                           // 优点：避免模拟器计算两列并排时的重叠高度问题
+                           // 缺点：如果 Grid 很长，跨页模拟可能不精准（但通常 Skill 不会跨页）
+                           addBlock(grid, 'static', '专业技能网格');
+                           
+                           // 也可以选择遍历子元素，但是需要处理 Grid Row 的逻辑。
+                           // 简单起见，作为一个整体处理是最稳妥的（要么整体在下一页，要么整体在上一页）
+                       } else {
+                           const cats = Array.from(sibling.querySelectorAll('.skill-category'));
+                           cats.forEach(c => addBlock(c, 'static', '专业技能模块'));
                        }
-                       
-                       const cats = Array.from(sibling.querySelectorAll('.skill-category'));
-                       cats.forEach(cat => {
-                           blocks.push({ type: 'static', height: cat.getBoundingClientRect().height });
-                       });
-                   } 
-                   else {
-                       // Keep as is (e.g. Certificate Section)
-                       // Add margin bottom to height effectively?
-                       // Or just ignore margin bottom at end of doc?
+                   } else if (sibling.querySelector('.certificate-item')) {
+                       // Certs
+                       const t = sibling.querySelector('.section-title');
+                       if (t) addBlock(t, 'static', '证书标题');
+                       const items = Array.from(sibling.querySelectorAll('.certificate-item'));
+                       if (items.length > 0) items.forEach(it => addBlock(it, 'static', '证书项'));
+                       else addBlock(sibling, 'static', '证书(空)');
+                   } else {
+                       addBlock(sibling, 'static', '其他模块');
                    }
-
-                   // Gap to next sibling
-                   const currentBottom = rect.bottom + window.scrollY;
-                   const nextSib = sibling.nextElementSibling;
-                   if (nextSib) {
-                       const nextTop = nextSib.getBoundingClientRect().top + window.scrollY;
-                       const gap = nextTop - currentBottom;
-                       if (gap > 0) blocks.push({ type: 'gap', height: gap });
-                   }
-                   
                    sibling = sibling.nextElementSibling;
               }
-          } else {
-             // Fallback if structure is different
-             const lastWork = workItems[workItems.length - 1];
-             if (lastWork) {
-                 const lastBottom = lastWork.getBoundingClientRect().bottom + window.scrollY;
-                 const totalH = document.documentElement.scrollHeight;
-                 const bottomH = totalH - lastBottom;
-                 if (bottomH > 0) blocks.push({ type: 'static', height: bottomH });
-             }
           }
-
+          
           return blocks;
       }) as LayoutBlock[];
-
       console.log(`[Metrics] Extracted ${allBlocks.length} layout blocks.`);
 
-      // 3. Iterative Layout Solver (The New Algorithm)
+      // 3. Iterative Layout Solver (The New Algorithm: Simulation-Based)
       // 计算目标: 
-      // 1. 获取所有模块的静态高度 (gap, static, headers)
-      // 2. 获取所有 Bullet Points 的高度
-      // 3. 计算目标页数 (Round)
-      // 4. 计算需要插入多少个 Bullet 才能恰好填满目标页数
-      // 5. 将这些 Bullet 分配给各个工作 (优先最新)
-      // 6. 检查 Orphan，如果存在，执行 "减后补前" (Swap Strategy)
+      // 1. 基于最大内容运行虚拟布局，计算自然页数 (Natural Pages)
+      // 2. 如果自然页数只有一点点超出 (例如 1.1 页)，试图压缩回 1 页 (Smart Target)
+      // 3. 确定 Target Pages 后，从 Min Config (3 bullets) 开始贪婪填充 (Greedy Fill)
+      // 4. 每次填充都运行虚拟布局检查是否溢出 Target Pages
+      // 5. 填充完毕后，检查 Orphan 并尝试交换解决
 
-      // A. Data Preparation
-      const PAGE_HEIGHT = 1123;
-      const ORPHAN_THRESHOLD = 90; // Increased threshold to catch visual orphans earlier
-      // Filter out bullets from blocks to get static height
-      const staticBlocks = allBlocks.filter(b => b.type !== 'job_bullet');
-      const staticHeight = staticBlocks.reduce((sum, b) => sum + b.height, 0);
-      
+      // A4 Height = 1123px. 
+      // Template has @page { margin: 40px 50px; }
+      // So available vertical space is roughly 1123 - 40 - 40 = 1043px.
+      // Use conservative value to ensure fit.
+      // Use conservative value to ensure fit (defined at top of function).
+
+      // const ORPHAN_THRESHOLD = 90; // (Used inside simulation if check needed)
+
+      // Helpers
       const allBullets = allBlocks.filter(b => b.type === 'job_bullet');
-      // Group bullets by job
+
       const bulletsByJob: { [key: number]: typeof allBullets } = {};
       allBullets.forEach(b => {
           if (typeof b.jobIndex === 'number') {
@@ -1015,213 +938,101 @@ export class ResumeGenerator {
             bulletsByJob[b.jobIndex].push(b);
           }
       });
-      // Sort bullets by index just in case
+      // Sort bullets by index
       Object.keys(bulletsByJob).forEach(k => {
           bulletsByJob[parseInt(k)].sort((a,b) => (a.bulletIndex||0) - (b.bulletIndex||0));
       });
-      
-      // B. Determine Target Pages
-      const totalContentHeight = allBlocks.reduce((s, b) => s + b.height, 0);
-      const exactPages = totalContentHeight / PAGE_HEIGHT;
-      let targetPages = Math.round(exactPages); 
-      // Special logic: If extremely close to N.5 (e.g. 1.45 - 1.55), prefer ceiling to avoid over-compression?
-      // Or prefer floor to condense? User prefers "Smart One Page" ideally. 
-      // Let's stick to Round: 1.4 -> 1, 1.6 -> 2.
-      if (targetPages < 1) targetPages = 1;
-      
-      // Calculate Budget for Bullets
-      // Total Available Height = Pages * 1123 - MarginBottom(approx 50)
-      // Bullet Budget = Total Available - Static Height
-      // Relaxed safety margin to 40 to allow slightly more content (relying on footer margin)
-      const totalAvailableHeight = (targetPages * PAGE_HEIGHT) - 40; 
-      let bulletHeightBudget = totalAvailableHeight - staticHeight;
-      if (bulletHeightBudget < 0) bulletHeightBudget = 0; // Should not happen unless static > page
-      
-      // C. Allocation Strategy (Greedy Fill)
-      // We need to pick bullets such that sum(height) <= bulletHeightBudget
-      // Strategy: 
-      // 1. Give every job at least Min Points (3)
-      // 2. Then distribute remaining budget to newest jobs first
-      
-      // numJobs already defined at top of method
-      let currentConfig = new Array(numJobs).fill(0);
-      
-      // C.1 Base Allocation (Min 3 or Max Available)
-      for (let j = 0; j < numJobs; j++) {
-          const available = bulletsByJob[j]?.length || 0;
-          const min = Math.min(3, available);
-          currentConfig[j] = min;
-          // Deduct from budget (Estimate height)
-          // We need precise height sum
-      }
-      
-      // Function to calculate total height of a config
-      const calcTotalHeight = (cfg: number[]) => {
-          let h = staticHeight;
-          for (let j = 0; j < numJobs; j++) {
-              const count = cfg[j];
-              const bullets = bulletsByJob[j] || [];
-              for (let k = 0; k < count; k++) {
-                  if (bullets[k]) h += bullets[k].height;
+
+      // Step C: Simulation Logic (Reused for Strategy)
+      const simulateLayout = (config: number[]) => {
+          const activeBlocks = allBlocks.filter(b => {
+               if (b.type === 'job_bullet') {
+                   if (typeof b.jobIndex !== 'number') return false;
+                   return (b.bulletIndex ?? 0) < (config[b.jobIndex] ?? 0);
+               }
+               return true; // Static blocks always active
+          });
+
+          let currentY = 0;
+          let pageNum = 1;
+          
+          for (const blk of activeBlocks) {
+              if (currentY + blk.height > PAGE_HEIGHT) {
+                  pageNum++;
+                  currentY = blk.height; 
+              } else {
+                  currentY += blk.height;
               }
           }
-          return h;
+          return { pages: pageNum, lastPageHeight: currentY };
       };
 
-      // C.2 Distribute Remaining Budget
-      // Priority: Job 0 > Job 1 > ... > Job N
-      // Limit: Up to available bullets
-      let canAdd = true;
-      while (canAdd) {
-          canAdd = false;
-          // Try to add one bullet to each job from top to bottom
-          for (let j = 0; j < numJobs; j++) {
-              // Check if we can add to this job
-              const currentCount = currentConfig[j];
-              const maxAvailable = bulletsByJob[j]?.length || 0;
-              
-              if (currentCount < maxAvailable) {
-                  // Check if adding this bullet fits in budget
-                  const nextBullet = bulletsByJob[j][currentCount];
-                  if (calcTotalHeight(currentConfig) + nextBullet.height <= totalAvailableHeight) {
+      // --- DEBUG OUTPUT START ---
+      // (Simplified Debug Logic)
+      const staticTotal = allBlocks.filter(b=>b.type!=='job_bullet').reduce((a,b)=>a+b.height,0);
+      console.log(`\n=== 布局计算报告 ===`);
+      console.log(`1. 固定空间计算: ${Math.round(staticTotal)} (约占 ${Math.ceil(staticTotal/PAGE_HEIGHT)} 页)`);
+      if (staticTotal > PAGE_HEIGHT) console.log(`   [警报] 固定高度超过 ${Math.ceil(staticTotal/PAGE_HEIGHT)-1} 页！`);
+
+      // 2. Greedy Allocation based on Strategy Target
+      // Start with Min Config: Recent 5, others 3
+      let currentConfig: number[] = new Array(numJobs).fill(0).map((_, i) => i === 0 ? 5 : 3);
+      
+      // Filter available bullets count
+      const maxBulletsPerJob = new Array(numJobs).fill(0);
+      allBlocks.forEach(b => {
+          if (b.type === 'job_bullet' && typeof b.jobIndex === 'number') {
+              maxBulletsPerJob[b.jobIndex] = Math.max(maxBulletsPerJob[b.jobIndex], (b.bulletIndex || 0) + 1);
+          }
+      });
+      // Safety clamp
+      currentConfig = currentConfig.map((v, i) => Math.min(v, maxBulletsPerJob[i]));
+      
+      // Check if base config already explodes
+      const baseSim = simulateLayout(currentConfig);
+      if (baseSim.pages > targetPages) {
+          console.warn(`[Solver] Base config exceeds target ${targetPages}. Keeping base.`);
+      } else {
+          // Fill until full
+          let changed = true;
+          while(changed) {
+              changed = false;
+              for (let j = 0; j < numJobs; j++) {
+                  if (currentConfig[j] < maxBulletsPerJob[j]) {
+                      // Try adding
                       currentConfig[j]++;
-                      canAdd = true; // We added something, so loop again
-                      // But maybe we should break to restart priority from Job 0? 
-                      // "Distribute to newest jobs first" implies fill Job 0 THEN Job 1.
-                      // Let's fill Job 0 as much as possible, then Job 1.
-                      // So: break loop to restart at j=0? No, that would starve older jobs if budget is tight.
-                      // Better balanced approach? Or strictly "Rich get richer"?
-                      // Prompt says "Importance sorted". Job 0 is most important.
-                      // Let's strictly fill Job 0, then Job 1...
+                      const sim = simulateLayout(currentConfig);
+                      if (sim.pages <= targetPages) {
+                          changed = true; // Keep it
+                      } else {
+                          currentConfig[j]--; // Revert
+                      }
                   }
               }
           }
-          // The above loop round-robins. If we really want "Job 0 Full first", we should change loop.
-          // Let's Stick to round robin but weighted? 
-          // Actually, let's try a prioritized filling:
-          // Fill Job 0 to Max, then Job 1...
       }
-      
-      // Restart Allocation with Strict Priority for better result matching "Standard" scenario constraints
-      // Reset
-      currentConfig = new Array(numJobs).fill(0);
-      for (let j = 0; j < numJobs; j++) currentConfig[j] = Math.min(3, bulletsByJob[j]?.length || 0); // Base 3
-      
-      for (let j = 0; j < numJobs; j++) {
-           const maxAvailable = bulletsByJob[j]?.length || 0;
-           while (currentConfig[j] < maxAvailable) {
-               const nextBullet = bulletsByJob[j][currentConfig[j]];
-               if (calcTotalHeight(currentConfig) + nextBullet.height <= totalAvailableHeight) {
-                   currentConfig[j]++;
-               } else {
-                   break; // Budget full
-               }
-           }
-      }
+
+      // Calculate Final Stats
+      const finalSim = simulateLayout(currentConfig);
+      const spaceLeft = PAGE_HEIGHT - finalSim.lastPageHeight;
+      const fillPercent = ((spaceLeft / PAGE_HEIGHT) * 100).toFixed(1);
+
+      console.log(`3. 最佳填充方案: [${currentConfig}]`);
+      console.log(`4. 尾部留白: ${fillPercent}%`);
+      console.log(`=====================\n`);
 
       console.log(`[Solver] Initial Computed Config: [${currentConfig}] for Target Pages: ${targetPages}`);
 
-      // D. Orphan Solver (Iterative Swap)
-      // Simulate Layout -> Check Orphan -> Swap
-      
-      const MAX_ITERATIONS = 10;
-      for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-          
-          let orphanFound = false;
-          const blocks = allBlocks.filter(b => {
-             if (b.type === 'job_bullet') {
-                 if (this.getJobConfig(currentConfig, b.jobIndex)) 
-                    return (b.bulletIndex || 0) < currentConfig[b.jobIndex!];
-             }
-             return true;
-          });
-          
-          // Simulation to find Orphan
-          let currentY = 0;
-          let pageNum = 1;
-          let orphanJobIndex = -1;
-          
-          for (let i = 0; i < blocks.length; i++) {
-              const blk = blocks[i];
-              let h = blk.height;
-              const spaceLeft = (PAGE_HEIGHT * pageNum) - currentY;
-              
-              if (h > spaceLeft) {
-                  pageNum++;
-                  currentY = h; 
-              } else {
-                  // Check Orphan Header
-                  if (blk.type === 'job_header') {
-                      // If Header is at bottom
-                      if (spaceLeft - h < ORPHAN_THRESHOLD) {
-                          // Check if next block needs break
-                          let nextH = 0;
-                          if (i+1 < blocks.length) nextH = blocks[i+1].height;
-                          if(spaceLeft - h < nextH) {
-                              // Orphan Confirmed!
-                              orphanJobIndex = blk.jobIndex!;
-                              orphanFound = true;
-                              // Don't break loop, we need to know exactly which one. 
-                              // Actually we can stop at first orphan to fix it.
-                              break; 
-                          }
-                      }
-                  }
-                  currentY += h;
-              }
-          }
-          
-          if (!orphanFound) break; // Solved!
-          
-          console.log(`[Solver] Iteration ${iter}: Orphan detected at Job ${orphanJobIndex}. Applying Swap Strategy.`);
-          
-          // Strategy: "Subtract from Last (Earliest), Add to First (Newest)"
-          // Ideally this pushes content down, moving the orphan header to next page.
-          
-          // 1. Identify Donor (Last Job with > 3 bullets)
-          let donorIndex = -1;
-          for (let j = numJobs - 1; j >= 0; j--) {
-              if (currentConfig[j] > 3) { // Keep min 3
-                  donorIndex = j;
-                  break;
-              }
-          }
-          
-          // 2. Identify Receiver (First Job with room)
-          // Actually, we want to add BEFORE the orphan. 
-          // Adding to Job 0 is safest to push everyone down.
-          let receiverIndex = -1;
-          for (let j = 0; j < orphanJobIndex; j++) {
-              if (currentConfig[j] < (bulletsByJob[j]?.length || 0)) {
-                  receiverIndex = j;
-                  break;
-              }
-          }
-           
-          // Execute Swap
-          if (donorIndex !== -1 && receiverIndex !== -1) {
-              currentConfig[donorIndex]--;
-              currentConfig[receiverIndex]++;
-              console.log(`   -> Swapped: -Job${donorIndex} / +Job${receiverIndex}. New: [${currentConfig}]`);
-          } else {
-              // Swap Failed (No donor or No receiver)
-              // Fallback: Just Pull Up? (Remove from Predecessor of Orphan)
-              // "Reduce a point on the second work experience" (assuming orphan is 2nd or 3rd)
-              // Try to reduce the job immediately before the orphan
-              const prevJob = orphanJobIndex - 1;
-              if (prevJob >= 0 && currentConfig[prevJob] > 3) {
-                   currentConfig[prevJob]--;
-                   console.log(`   -> Swap Failed. Fallback: Reduced Job${prevJob} to Pull Up. New: [${currentConfig}]`);
-              } else {
-                   console.warn("   -> Cannot Fix Orphan. Constraints reached.");
-                   break;
-              }
-          }
-      }
+      // D. Orphan Solver (Simplified or Removed per strict strategy)
+      // Strict Strategy usually means we fill pages. 
+      // Orphans might happen but changing config might violate "fill pages" goal.
+      // We rely on applySmartPageBreaks for final cleanup.
+      // (Orphan solving loop removed for Strategy Mode)
+
 
       // E. Render Final
       console.log(`[Solver] Final Optimized Config: [${currentConfig}]`);
-      const finalOps: RenderOptions = { jobConfig: currentConfig, maxSkillItems: currentConfig[0] + 2 };
+      const finalOps: RenderOptions = { jobConfig: currentConfig, strategy: strategy };
       const finalHtml = this.generateHTML(data, finalOps);
       // await page.setContent(finalHtml, { waitUntil: 'load' }); // Done by caller logic steps
       
@@ -1229,7 +1040,7 @@ export class ResumeGenerator {
       // We return the content string, but we need to apply density tweaks first.
       // So we must setContent here.
       await page.setContent(finalHtml, { waitUntil: 'load' });
-      await this.adjustLayoutDensity(page); // Final Polish
+      // adjustLayoutDensity removed per user request
       await this.applySmartPageBreaks(page); // Final Breaks
       
       return await page.content();
