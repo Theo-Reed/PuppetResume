@@ -1,12 +1,22 @@
 const { MongoClient } = require('mongodb');
+require('dotenv').config();
 
 async function main() {
-  const uri = 'mongodb://127.0.0.1:27017';
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+      console.error('❌ Error: MONGODB_URI not found in .env');
+      process.exit(1);
+  }
   const client = new MongoClient(uri);
 
   try {
     await client.connect();
-    const db = client.db('miniprogram_db');
+    const dbName = process.env.MONGODB_DB_NAME;
+    if (!dbName) {
+        console.error('❌ Error: MONGODB_DB_NAME not found in .env');
+        process.exit(1);
+    }
+    const db = client.db(dbName);
     
     await db.collection('member_schemes').deleteMany({});
     await db.collection('member_schemes').insertMany([

@@ -33,3 +33,5 @@ npm-debug.log*
 *.pem
 *.log
 public/uploads/
+
+fill_test_data.ts
