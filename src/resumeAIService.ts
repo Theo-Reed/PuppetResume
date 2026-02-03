@@ -19,19 +19,52 @@ export class ResumeAIService {
     const { resume_profile: profile, job_data: job, language } = payload;
     const isEnglish = language === 'english';
 
-    // 辅助函数：校验字段是否合法（非空且非 AI 占位符）
-    const isIllegal = (val: any) => {
+    // 辅助函数：校验字段是否合法（支持递归检查）
+    const isIllegal = (val: any): boolean => {
       if (val === undefined || val === null) return true;
+
+      // 1. 如果是数组，递归检查每一项
+      if (Array.isArray(val)) {
+        return val.length === 0 || val.some(item => isIllegal(item));
+      }
+
+      // 2. 如果是对象，递归检查所有属性值
+      if (typeof val === 'object') {
+        return Object.values(val).some(v => isIllegal(v));
+      }
+
       const s = String(val).trim().toLowerCase();
-      // 过滤常见的 AI 逃避性占位符
-      return s === "" || s === "undefined" || s === "null" || s === "nan" || s === "暂无" || s === "none";
+      
+      // 1. 过滤极其短或明显的空值
+      if (s === "" || s === "undefined" || s === "null" || s === "nan" || s === "暂无" || s === "none") return true;
+      
+      // 2. 检测 AI 常见的乱码和占位符
+      if (s.includes("\uFFFD")) return true;
+      if (s.includes("_placeholder_") || s.includes("placeholder_bold")) return true;
+      
+      // 3. 常见的 AI 表达痕迹 / 幻觉占位符
+      const hasBrackets = /\[(.*?名字|.*?公司|.*?时间|.*?名称|.*?经验|.*?Name|.*?Company|.*?Time|.*?Project)\]/i.test(s);
+      if (hasBrackets) return true;
+
+      // 4. 禁止 AI 在字段内进行自我介绍或道歉
+      const aiMarkers = ["as an ai", "large language model", "sorry", "cannot fulfill", "对不起", "抱歉", "无法生成"];
+      if (aiMarkers.some(marker => s.includes(marker))) return true;
+
+      return false;
     };
 
-    // 直接取值，不再做复杂判断，因为你确认它不为空
-    const targetTitle = isEnglish ? (job.title_english || job.title_chinese) : job.title_chinese;
+    // 直接取值，清洗逻辑完全交给 Prompt 处理
+    const targetTitle = isEnglish 
+      ? (job.title_english || job.title_chinese) 
+      : job.title_chinese;
 
     // 2. Delegate Logic to ExperienceCalculator
     const calcResult = ExperienceCalculator.calculate(profile, job);
+    
+    // 3. 准备排版元数据
+    // 根据 594px 净文本宽度 (694-40-40-20) 和 14px 字号计算
+    // 594 / 14 = 42.42, 取 42 较为精准
+    const maxCharPerLine = isEnglish ? 90 : 42; 
     
     // Destructure for Prompt Construction
     const { 
@@ -44,9 +77,9 @@ export class ResumeAIService {
         finalTotalYears,
         supplementSegments,
         allWorkExperiences,
-        earliestWorkDate
+        earliestWorkDate,
+        seniorityThresholdDate
     } = calcResult;
-    
     // 4. 构造 Prompt
     const promptContext = {
       targetTitle,
@@ -61,7 +94,9 @@ export class ResumeAIService {
       supplementYears,
       finalTotalYears,
       supplementSegments,
-      allWorkExperiences
+      allWorkExperiences,
+      seniorityThresholdDate,
+      maxCharPerLine
     };
 
     const prompt = isEnglish 
@@ -71,26 +106,95 @@ export class ResumeAIService {
 
     try {
       const aiResponse = await this.gemini.generateContent(prompt, (text) => {
+        // 1. 全局非法内容扫描 (Gemini 常见异常输出)
+        const lowerText = text.toLowerCase();
+        const illegalPatterns = [
+          "_placeholder_",
+          "placeholder_bold",
+          "_PLACEHOLDER_BOLD_",
+          "as an ai language model",
+          "cannot fulfill",
+          "my programming",
+          "对不起，我无法",
+          "抱歉，我不能",
+          "---", 
+          "...",  
+        ];
+
+        if (illegalPatterns.some(p => text.includes(p) || lowerText.includes(p))) {
+          throw new Error("检测到 AI 输出包含非法占位符或拒绝性话术");
+        }
+
+        if (text.includes("\uFFFD")) {
+          throw new Error("检测到 AI 输出包含 Unicode 替换字符 (\uFFFD)");
+        }
+
         try {
           const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
           const data = JSON.parse(jsonStr);
           
-          // 严格验证字段，如果缺失或包含非法内容，返回 false 触发重试/切模型
+          // 2. 严格验证字段
           const requiredFields = ['position', 'yearsOfExperience', 'personalIntroduction', 'professionalSkills', 'workExperience'];
           for (const field of requiredFields) {
             if (isIllegal(data[field])) {
-              throw new Error(`关键字段 "${field}" 内容非法或缺失`);
+              throw new Error(`关键字段 "${field}" 内容非法、缺失或包含无效嵌套内容`);
             }
           }
+
+          // 3. 数量强制校验 (仅限中文，确保素材充足以供裁剪)
+          if (!isEnglish) {
+            // 校验工作经历职责数量 (必须为 8)
+            const hasWrongResponsibilityCount = data.workExperience.some((exp: any) => 
+               !exp.responsibilities || exp.responsibilities.length !== 8
+            );
+            if (hasWrongResponsibilityCount) {
+              throw new Error("AI 生成的工作职责数量不足 8 条，触发重试");
+            }
+
+            // 校验技能分类数量 (必须为 4)
+            if (data.professionalSkills.length !== 4) {
+              throw new Error("AI 生成的技能分类数量不足 4 组，触发重试");
+            }
+
+            // 校验每个技能分类下的点数 (必须为 4)
+            const hasWrongSkillItemCount = data.professionalSkills.some((cat: any) => 
+              !cat.items || cat.items.length !== 4
+            );
+            if (hasWrongSkillItemCount) {
+              throw new Error("AI 生成的技能点数量不足 4 条/组，触发重试");
+            }
+          }
+
           return true;
         } catch (e: any) {
-          throw new Error(`JSON 逻辑校验未通过: ${e.message}`);
+          throw new Error(`逻辑校验未通过: ${e.message}`);
         }
       });
 
       // 如果能执行到这里，说明已经通过了上面的 validator 校验
       const jsonStr = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
       const enhancedData = JSON.parse(jsonStr);
+
+      // 3. 记录视觉内容密度 (仅记录日志，不再抛出异常，由本地代码执行裁剪)
+      if (!isEnglish && enhancedData.workExperience) {
+        const CPL = maxCharPerLine; 
+        enhancedData.workExperience.forEach((exp: any, expIdx: number) => {
+          if (exp.responsibilities && Array.isArray(exp.responsibilities)) {
+            exp.responsibilities.forEach((item: string, itemIdx: number) => {
+              const visualLength = item.split('').reduce((acc, char) => {
+                return acc + (/[^\x00-\xff]/.test(char) ? 1 : 0.5);
+              }, 0);
+              
+              const remainder = visualLength % CPL;
+              const percent = (remainder === 0 && visualLength > 0) ? 1 : remainder / CPL;
+              
+              if (percent < 0.3) {
+                console.warn(`[排版建议] 工作经历 ${expIdx + 1} 的第 ${itemIdx + 1} 条职责可能留白过大 (填充率: ${Math.round(percent * 100)}%)`);
+              }
+            });
+          }
+        });
+      }
 
       // 合并数据
       return {

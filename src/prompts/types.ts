@@ -14,4 +14,8 @@ export interface PromptContext {
   finalTotalYears: number;
   supplementSegments: Array<{ startDate: string; endDate: string; years: number }>;
   allWorkExperiences: Array<{ startDate: string; endDate: string; type: 'existing' | 'supplement'; index?: number }>;
+  seniorityThresholdDate?: string; // e.g. "2030-01" - limit for Senior/Manager titles
+  
+  // 排版控制元数据
+  maxCharPerLine?: number;     // 每行目标字符数 (中文字符权重为1，英数权重为0.5)
 }

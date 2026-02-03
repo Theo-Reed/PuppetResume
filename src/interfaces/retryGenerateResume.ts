@@ -81,8 +81,11 @@ router.post('/retryGenerateResume', async (req: Request, res: Response) => {
         jobId: resume.jobId || jobData._id,
         resume_profile: resume.resumeInfo, 
         job_data: jobData,
-        language: (resume.resumeInfo as any).language || 'chinese' 
+        language: resume.language || (resume.resumeInfo as any).language || 'chinese' 
     };
+
+    const finalTaskId = resume.task_id || resume.taskId || `RESUME_RETRY_${Date.now()}`;
+    console.log(`🔄 为任务 ${finalTaskId} (ID: ${resumeId}) 触发重试, 语言: ${payload.language}`);
 
     // 4. 重置状态
     await resumesCollection.updateOne(
@@ -90,6 +93,7 @@ router.post('/retryGenerateResume', async (req: Request, res: Response) => {
         { 
             $set: { 
                 status: 'processing', 
+                task_id: finalTaskId, // 确保 task_id 存在以便后续更新
                 errorMessage: null,
                 retryTime: new Date()
             } 
@@ -97,11 +101,18 @@ router.post('/retryGenerateResume', async (req: Request, res: Response) => {
     );
 
     // 5. 重新触发后台任务
-    // 从 app.locals 获取服务实例
-    const { gemini, aiService, generator } = req.app.locals.services;
-    const services: TaskServices = { db, gemini, aiService, generator };
+    // 获取服务实例
+    const services = req.app.locals.services;
+    if (!services) {
+        console.error('❌ Retry failed: services not found in app.locals');
+        return res.status(500).json({ success: false, message: 'Internal server error: Services missing' });
+    }
+    
+    const { gemini, aiService, generator } = services;
+    const taskServices: TaskServices = { db, gemini, aiService, generator };
 
-    runBackgroundTask(resume.task_id || resume.taskId, payload, services);
+    // 立即执行后台任务，不阻塞响应
+    runBackgroundTask(finalTaskId, payload, taskServices);
 
     res.json({
         success: true,

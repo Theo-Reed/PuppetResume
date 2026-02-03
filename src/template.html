@@ -18,17 +18,23 @@
         u {
             text-decoration: underline;
         }
+
+        /* Print Margins: Applies to every page automatically */
+        @page {
+            margin: 40px 50px;
+            size: A4;
+        }
         
         body {
             font-family: 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
             color: #333;
             line-height: 1.6;
-            padding: 40px 50px;
+            padding: 0; /* Handled by @page margin */
             background: #fff;
         }
         
         .resume {
-            max-width: 800px;
+            width: 694px; /* A4 width(794px) - 50px*2 margins */
             margin: 0 auto;
             background: #fff;
         }
@@ -146,8 +152,15 @@
             border-left: 4px solid #3498db;
             padding-left: 12px;
             margin-bottom: 20px;
+            margin-top: 30px; 
+            /* 恢复为 30px 增加呼吸感 */
         }
         
+        /* 第一个 section-title 不需要顶部边距，避免距离 header 太远 */
+        .section:first-of-type .section-title {
+             margin-top: 0;
+        }
+
         .education-item {
             margin-bottom: 20px;
         }
@@ -156,7 +169,7 @@
             display: flex;
             justify-content: space-between;
             align-items: baseline;
-            margin-bottom: 8px;
+            margin-bottom: 12px; /* 统一为 12px */
         }
         
         .school-name {
@@ -191,27 +204,38 @@
         }
         
         .skill-category {
-            margin-bottom: 25px;
+            margin-bottom: 10px; /* 减少底部边距，防止在 Grid 中累加过大 */
         }
         
         .skill-category-title {
             font-size: 16px;
             font-weight: bold;
             color: #2c3e50;
-            margin-bottom: 10px;
+            margin-bottom: 15px; /* 从 18px 调整为 15px */
         }
-        
+
+        /* Grid Container */
+        .skills-grid {
+            display: grid;
+            grid-template-columns: 1fr; 
+            column-gap: 30px; 
+            row-gap: 15px; /* 使用 row-gap 代替子元素的 margin-bottom，更容易控制 */
+            margin-bottom: 0; /* 依靠后一个 section 的 margin-top */
+        }
+
+        /* 恢复为默认列表样式（因为外层已经是两栏了） */
         .skill-items {
+            display: block;
             margin-left: 0;
         }
         
         .skill-item {
             font-size: 14px;
             color: #555;
-            margin-bottom: 6px;
-            padding-left: 20px;
+            padding-left: 20px; /* 统一为 20px */
             position: relative;
-            line-height: 1.7;
+            line-height: 1.6;
+            margin-bottom: 9px; /* 统一为 9px，与工作经历一致 */
         }
         
         .skill-item::before {
@@ -279,10 +303,12 @@
         .responsibility-item {
             font-size: 14px;
             color: #555;
-            margin-bottom: 6px;
+            margin-bottom: 9px; /* 减少 2px (从 11px 减至 9px) */
             padding-left: 20px;
             position: relative;
             line-height: 1.7;
+            text-align: justify; /* 添加两端对齐，确保行末对齐 */
+            word-break: break-all; /* 防止长单词导致行末大量空白 */
         }
         
         .responsibility-item::before {
@@ -337,10 +363,7 @@
         </div>
         
         <!-- 证书 -->
-        <div class="section">
-            <div class="section-title">{{TITLE_CERTIFICATES}}</div>
-            {{CERTIFICATES}}
-        </div>
+        {{SECTION_CERTIFICATES}}
     </div>
 </body>
 </html>

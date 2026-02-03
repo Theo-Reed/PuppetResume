@@ -1,0 +1,26 @@
+name: Auto Deploy
+
+on:
+  push:
+    branches:
+      - main  # 当你向 main 分支推送代码时触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          password: ${{ secrets.REMOTE_PASSWORD }}
+          script: |
+            cd /root/projects/PuppetResume  # 进入你的项目目录
+            git pull origin main             # 拉取最新代码
+            export PUPPETEER_SKIP_DOWNLOAD=true # 记得跳过那个讨厌的浏览器下载
+            npm install                      # 安装新增加的依赖
+            pm2 reload puppet-backend        # 无缝重启项目

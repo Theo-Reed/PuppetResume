@@ -24,6 +24,7 @@ if (!existsSync(RESUMES_DIR)) {
  */
 export async function runBackgroundTask(taskId: string, payload: GenerateFromFrontendRequest, services: TaskServices) {
     const { db, gemini, aiService, generator } = services;
+    console.log(`🚀 [Task ${taskId}] 后台任务启动...`);
 
   if (!db) {
     console.error(`[Task ${taskId}] ❌ 无法启动后台任务：数据库未初始化`);
