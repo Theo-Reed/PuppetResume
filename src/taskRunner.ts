@@ -1,8 +1,12 @@
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import pLimit from 'p-limit';
 import { GenerateFromFrontendRequest } from './types';
 import { ResumeAIService } from './resumeAIService';
 import { ResumeGenerator } from './resumeGenerator';
+
+// 创建并发限制器：限制同时进行的生成任务数量为 2
+const limit = pLimit(2);
 
 // 定义依赖接口
 export interface TaskServices {
@@ -20,12 +24,19 @@ if (!existsSync(RESUMES_DIR)) {
 }
 
 /**
- * 异步后台任务：负责 AI 增强、PDF 生成和本地保存
- * 基准参考: tests/full_flow_test.ts
+ * 包装器：确保任务受并发限制器控制
  */
 export async function runBackgroundTask(taskId: string, payload: GenerateFromFrontendRequest, services: TaskServices) {
+  return limit(() => executeTask(taskId, payload, services));
+}
+
+/**
+ * 实际的后台任务执行逻辑：负责 AI 增强、PDF 生成和本地保存
+ * 基准参考: tests/full_flow_test.ts
+ */
+async function executeTask(taskId: string, payload: GenerateFromFrontendRequest, services: TaskServices) {
   const { db } = services;
-  console.log(`\n🚀 [Task ${taskId}] 后台任务启动 (基准模式)...`);
+  console.log(`\n🚀 [Task ${taskId}] 后台任务启动 (并发通道已占用)...`);
 
   if (!db) {
     console.error(`[Task ${taskId}] ❌ 无法启动后台任务：数据库未初始化`);
