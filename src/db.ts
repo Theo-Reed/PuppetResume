@@ -37,7 +37,6 @@ export async function connectToLocalMongo(): Promise<Db> {
     throw error;
   }
 }
-}
 
 export function getDb(): Db {
   if (!db) {
