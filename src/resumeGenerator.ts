@@ -55,42 +55,35 @@ export class ResumeGenerator {
 
       switch (cycleIndex) {
           case 0: // Matches Job 1, 4, 7...
-              // Style: Skills 1 Col, 4 Cats, 4 Items (Certs: 3 Items)
+              // Style: Skills 1 Col, 4 Cats, 4 Items
               strategy = {
                   targetPages: targetPages,
                   skillColumns: 1,
                   skillCategories: 4,
                   skillItemsPerCat: 4
               };
-              if (hasCertificates) {
-                  strategy.skillItemsPerCat = 3;
-              }
               break;
               
           case 1: // Matches Job 2, 5, 8...
-              // Style: Skills 2 Cols, 4 Cats, 4 Items (Certs: 3 Items)
+              // Style: Skills 2 Cols, 4 Cats, 4 Items
               strategy = {
                   targetPages: targetPages,
                   skillColumns: 2,
                   skillCategories: 4,
                   skillItemsPerCat: 4
               };
-              if (hasCertificates) {
-                   strategy.skillItemsPerCat = 3;
-              }
               break;
               
           case 2: // Matches Job 3, 6, 9...
-              // Style: Skills 2 Cols, 3 Cats, 5 Items (Certs: 4 Cats, 4 Items)
+              // Style: Skills 2 Cols, 3 Cats, 4 Items (If certs exist, 4 Cats)
               strategy = {
                   targetPages: targetPages,
                   skillColumns: 2,
                   skillCategories: 3,
-                  skillItemsPerCat: 5
+                  skillItemsPerCat: 4
               };
               if (hasCertificates) {
                   strategy.skillCategories = 4;
-                  strategy.skillItemsPerCat = 4;
               }
               break;
               
@@ -975,25 +968,43 @@ export class ResumeGenerator {
       if (staticTotal > PAGE_HEIGHT) console.log(`   [警报] 固定高度超过 ${Math.ceil(staticTotal/PAGE_HEIGHT)-1} 页！`);
 
       // 2. Greedy Allocation based on Strategy Target
-      // Start with Min Config: Recent 5, others 3
-      let currentConfig: number[] = new Array(numJobs).fill(0).map((_, i) => i === 0 ? 5 : 3);
+      // 初始分配：第一份工作 6 条职责，其他工作 4 条，以保证高质量呈现
+      let currentConfig: number[] = new Array(numJobs).fill(0).map((_, i) => i === 0 ? 6 : 4);
       
-      // Filter available bullets count
+      // 获取 AI 提供给这段经历的实际最大职责数 (通常由 AI 服务层强制为 8)
       const maxBulletsPerJob = new Array(numJobs).fill(0);
       allBlocks.forEach(b => {
           if (b.type === 'job_bullet' && typeof b.jobIndex === 'number') {
               maxBulletsPerJob[b.jobIndex] = Math.max(maxBulletsPerJob[b.jobIndex], (b.bulletIndex || 0) + 1);
           }
       });
-      // Safety clamp
+      // 安全限制，防止初始值超过 AI 实际生成的条数
       currentConfig = currentConfig.map((v, i) => Math.min(v, maxBulletsPerJob[i]));
       
       // Check if base config already explodes
       const baseSim = simulateLayout(currentConfig);
       if (baseSim.pages > targetPages) {
-          console.warn(`[Solver] Base config exceeds target ${targetPages}. Keeping base.`);
+          // 如果基准配置（6/4/4...）已经超页，则向下裁剪
+          console.warn(`[Solver] Base config exceeds target ${targetPages}. Pruning down...`);
+          let canPrune = true;
+          while (canPrune) {
+              canPrune = false;
+              // 从最后一份工作开始往回减，直到不超页或减到 3 条为止
+              for (let j = numJobs - 1; j >= 0; j--) {
+                  if (currentConfig[j] > 3) {
+                      currentConfig[j]--;
+                      if (simulateLayout(currentConfig).pages <= targetPages) {
+                          // 减完这一条就达标了
+                          canPrune = false;
+                          break; 
+                      }
+                      canPrune = true; // 还能继续试
+                  }
+              }
+              if (currentConfig.every(v => v <= 3)) break; // 全减到 3 了还没法满足，就只能这样了
+          }
       } else {
-          // Fill until full
+          // 如果没超页，则向上增加（贪婪模式）
           let changed = true;
           while(changed) {
               changed = false;
