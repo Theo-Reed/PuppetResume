@@ -22,10 +22,10 @@ jobs:
             # 1. 进入项目目录
             cd /root/projects/PuppetResume || { echo "❌ Directory not found"; exit 1; }
             
-            # 2. 强制同步代码
+            # 2. 强制同步代码 (保持 .env 和 .pem 文件不被清理)
             echo "--- Git Syncing ---"
             git fetch --all
-            git clean -fd
+            git clean -fd -e .env -e "*.pem"
             git reset --hard origin/master
             
             # 3. 验证 HEAD 状态

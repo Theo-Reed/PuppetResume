@@ -25,6 +25,8 @@ router.post('/createOrder', async (req: Request, res: Response) => {
 
     // 2. Get User for Upgrade Logic
     const user: any = await ensureUser(openid);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    
     let payAmount = scheme.price;
     let orderType = scheme.type; // 'sprint', 'standard', 'ultimate', 'topup'
 
@@ -102,9 +104,13 @@ router.post('/createOrder', async (req: Request, res: Response) => {
         payment: paymentParams
       }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('createOrder error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
+    res.status(500).json({ 
+        success: false, 
+        message: 'Internal server error: ' + error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 }); 
 
