@@ -113,7 +113,11 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error('严重错误: 服务器启动失败');
+  console.error(err);
+  process.exit(1);
+});
 
 // 优雅关闭
 process.on('SIGTERM', async () => {
