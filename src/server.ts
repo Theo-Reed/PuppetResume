@@ -185,7 +185,9 @@ app.post('/api/generate', async (req: MulterRequest, res: Response) => {
     });
 
     // 3. 开启异步后台任务
-    const services: TaskServices = { db, gemini, aiService, generator };
+    // 基准说明：根据 tests/full_flow_test.ts 逻辑，services 将在后台任务内部实例化，
+    // 这里仅传递必要的数据库连接。
+    const services: TaskServices = { db };
     runBackgroundTask(taskId, payload, services);
 
     // 4. 立即返回 TaskID 给前端

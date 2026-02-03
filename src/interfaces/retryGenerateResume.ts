@@ -100,18 +100,8 @@ router.post('/retryGenerateResume', async (req: Request, res: Response) => {
         }
     );
 
-    // 5. 重新触发后台任务
-    // 获取服务实例
-    const services = req.app.locals.services;
-    if (!services) {
-        console.error('❌ Retry failed: services not found in app.locals');
-        return res.status(500).json({ success: false, message: 'Internal server error: Services missing' });
-    }
-    
-    const { gemini, aiService, generator } = services;
-    const taskServices: TaskServices = { db, gemini, aiService, generator };
-
-    // 立即执行后台任务，不阻塞响应
+    // 5. 启动任务 (遵循 tests/full_flow_test.ts 基准)
+    const taskServices: TaskServices = { db };
     runBackgroundTask(finalTaskId, payload, taskServices);
 
     res.json({

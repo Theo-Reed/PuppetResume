@@ -1,13 +1,13 @@
 import { join } from 'path';
-import { writeFileSync, existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import { GenerateFromFrontendRequest } from './types';
+import { ResumeAIService } from './resumeAIService';
+import { ResumeGenerator } from './resumeGenerator';
 
 // 定义依赖接口
 export interface TaskServices {
   db: any;
-  gemini: any;
-  aiService: any;
-  generator: any;
+  // 以下服务在由于“以测试为基准”的逻辑下，将在任务内部按需创建
 }
 
 const COLLECTION_RESUMES = 'generated_resumes';
@@ -21,53 +21,46 @@ if (!existsSync(RESUMES_DIR)) {
 
 /**
  * 异步后台任务：负责 AI 增强、PDF 生成和本地保存
+ * 基准参考: tests/full_flow_test.ts
  */
 export async function runBackgroundTask(taskId: string, payload: GenerateFromFrontendRequest, services: TaskServices) {
-    const { db, gemini, aiService, generator } = services;
-    console.log(`🚀 [Task ${taskId}] 后台任务启动...`);
+  const { db } = services;
+  console.log(`\n🚀 [Task ${taskId}] 后台任务启动 (基准模式)...`);
 
   if (!db) {
     console.error(`[Task ${taskId}] ❌ 无法启动后台任务：数据库未初始化`);
     return;
   }
 
+  // 1. 准备本地服务实例 (以 tests/full_flow_test.ts 为基准，每次任务使用独立实例)
+  const aiService = new ResumeAIService();
+  const generator = new ResumeGenerator();
+
   try {
-    // 在生成之前检查连通性，避免浪费计算资源
-    // 重试机制：尝试 3 次，每次间隔 3 秒
-    let check = { success: false, message: '' };
-    for (let i = 0; i < 3; i++) {
-        try {
-            check = await gemini.checkConnectivity();
-            if (check.success) break;
-        } catch (e: any) {
-            check.message = e.message;
-        }
-        if (i < 2) { // 只有前两次失败才等待
-            console.log(`[Task ${taskId}] ⚠️ 连通性测试失败，3秒后重试 (${i + 1}/3)...`);
-            await new Promise(resolve => setTimeout(resolve, 3000));
-        }
-    }
+    // Stage 1: AI 增强
+    console.log(`\n🤖 [Task ${taskId}] [Step 1/2] 正在调用 AI 进行内容增强...`);
+    const enhancedData = await aiService.enhance(payload);
+    
+    console.log(`✅ [Task ${taskId}] AI 增强完成！素材概览:`);
+    console.log(`- 岗位: ${enhancedData.position}`);
+    console.log(`- 个人介绍长度: ${enhancedData.personalIntroduction.length} 字`);
+    console.log(`- 技能组数量: ${enhancedData.professionalSkills?.length || 0}`);
+    console.log(`- 工作经历数: ${enhancedData.workExperience.length}`);
+    enhancedData.workExperience.forEach((exp, i) => {
+        console.log(`  [Job ${i+1}] ${exp.company} (${exp.startDate}-${exp.endDate}) - 职责数: ${exp.responsibilities?.length || 0}`);
+    });
 
-    if (!check.success) {
-      throw new Error(`Gemini 服务不可用: ${check.message} (已重试3次)`);
-    }
-
-    console.log(`[Task ${taskId}] 🤖 开始 AI 增强内容...`);
-    // 1. 调用 AI 增强服务
-    const resumeData = await aiService.enhance(payload);
-
-    console.log(`[Task ${taskId}] 📄 开始生成 PDF...`);
-    // 2. 生成 PDF Buffer
-    const pdfBuffer = await generator.generatePDFToBuffer(resumeData);
-
-    console.log(`[Task ${taskId}] 💾 开始保存到本地服务器...`);
-    // 3. 保存到本地
+    // Stage 2: PDF 生成
+    console.log(`\n📄 [Task ${taskId}] [Step 2/2] 正在启动布局引擎进行模拟与裁剪...`);
+    await generator.init();
+    
     const timestamp = Date.now();
     const fileName = `${payload.userId}_${timestamp}_${taskId}.pdf`;
     const filePath = join(RESUMES_DIR, fileName);
-    
-    writeFileSync(filePath, pdfBuffer);
     const fileUrl = `/public/resumes/${fileName}`;
+
+    // 直接生成到文件 (遵循测试基准逻辑)
+    await generator.generatePDFToFile(enhancedData, filePath);
 
     // 4. 更新数据库状态为成功
     await db.collection(COLLECTION_RESUMES).updateOne({ task_id: taskId }, {
@@ -78,9 +71,18 @@ export async function runBackgroundTask(taskId: string, payload: GenerateFromFro
       }
     });
 
-    console.log(`[Task ${taskId}] ✅ 任务完成，保存路径: ${filePath}`);
+    console.log(`\n🎉 [Task ${taskId}] 任务圆满完成！`);
+    console.log(`✅ 简历已生成并保存至: ${filePath}`);
+    
+    // 释放资源
+    await generator.close();
   } catch (error: any) {
-    console.error(`[Task ${taskId}] ❌ 任务处理失败:`, error);
+    console.error(`\n❌ [Task ${taskId}] 任务处理流程异常:`, error.message);
+    if (error.stack) console.error(error.stack);
+
+    // 确保资源被释放
+    try { await generator.close(); } catch (e) {}
+
     // 更新数据库状态为失败
     try {
       await db.collection(COLLECTION_RESUMES).updateOne({ task_id: taskId }, {
@@ -95,3 +97,4 @@ export async function runBackgroundTask(taskId: string, payload: GenerateFromFro
     }
   }
 }
+
