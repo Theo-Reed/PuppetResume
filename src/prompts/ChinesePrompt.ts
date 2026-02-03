@@ -49,7 +49,7 @@ export function generateChinesePrompt(context: PromptContext): string {
         - 消费/美妆: 真实的、刚起步的美国实验室品牌或小众独立 DTC。
         - 务必确保该公司在真实世界中可查（如有 Crunchbase 记录），但对普通大众甚至行业人员来说都非常陌生。`;
 
-    const segmentsText = supplementSegments.map((seg, idx) => `
+    const segmentsText = (supplementSegments || []).map((seg, idx) => `
     - **补充段落 ${idx + 1}**: ${seg.startDate} 至 ${seg.endDate} (${seg.years}年)
       * 结束时间若近6个月，写"至今"。
       ${companyNamingGuide}
@@ -66,9 +66,10 @@ export function generateChinesePrompt(context: PromptContext): string {
   }
 
   // 3. 所有经历的时间线列表（用于提示模型排序）
-  const timelineList = allWorkExperiences.map((exp, idx) => {
+  const timelineList = (allWorkExperiences || []).map((exp, idx) => {
     if (exp.type === 'existing') {
-        const orig = profile.workExperiences[exp.index!];
+        const orig = (profile.workExperiences || [])[exp.index!];
+        if (!orig) return `    ${idx + 1}. [现有数据缺失]`;
         return `    ${idx + 1}. [现有] ${orig.company} (${orig.startDate} 至 ${orig.endDate})`;
     } else {
         return `    ${idx + 1}. [补充] (生成的公司) (${exp.startDate} 至 ${exp.endDate})`;
@@ -76,7 +77,7 @@ export function generateChinesePrompt(context: PromptContext): string {
   }).join('\n');
 
   // 4. 用户现有经历文本
-  const existingExpText = profile.workExperiences.map((exp, i) => `
+  const existingExpText = (profile.workExperiences || []).map((exp, i) => `
     - [现有] 公司: ${exp.company} (⚠️必须保留原名) | 时间: ${exp.startDate} 至 ${exp.endDate} (⚠️必须保留)
       原始职位: ${exp.jobTitle} | 业务方向: ${exp.businessDirection}
       (参考内容: ${exp.workContent || "无"})
@@ -89,6 +90,15 @@ export function generateChinesePrompt(context: PromptContext): string {
 ### ⭐ 用户最高指令
 **"${profile.aiMessage || '无'}"**
 （⚠️ 若此指令与下述规则冲突，**必须无条件优先满足此指令**。）
+
+### 👤 用户个人信息 (必须体现在简历头部)
+- **姓名**: ${profile.name || '未提供'}
+- **性别**: ${profile.gender || '保密'}
+- **出生日期**: ${profile.birthday || '未提供'}
+- **联系电话**: ${profile.phone || '未提供'}
+- **电子邮箱**: ${profile.email || '未提供'}
+- **微信号**: ${profile.wechat || '未提供'}
+- **个人网站/作品集**: ${profile.website || '无'}
 
 ### 🚨 核心规则 (Strict Execution)
 1. **职位标准化**：将"${targetTitle}"清洗为符合**国内各行各业习惯**的标准职称。
@@ -133,11 +143,14 @@ export function generateChinesePrompt(context: PromptContext): string {
 ### 🛠️ 工作经历生成指南
 ${supplementInstruction}
 
-**最终所有经历的时间线顺序（必须严格执行）：**
+${existingExpText 
+  ? `**最终所有经历的时间线顺序（必须严格执行）：**
 ${timelineList}
 
 **现有经历概览（需重写职责）：**
-${existingExpText}
+${existingExpText}`
+  : `**用户当前无现有工作经历，请完全基于下方的时间线生成补充经历：**
+${timelineList}`}
 
 ### 📝 写作要求
 1. **职责描述 (Responsibilities)**：

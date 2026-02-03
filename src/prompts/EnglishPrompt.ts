@@ -62,9 +62,12 @@ You are a world-class resume expert specializing in tailoring profiles for Engli
 - **Requirement**: ${job.experience} (Min: ${requiredExp.min} years)
 
 ### 2. User Background
-- **Name**: ${profile.name}
-- **Original Skills (Reference)**: ${profile.skills.join(', ')}
-- **AI Instruction**: ${profile.aiMessage}
+- **Name**: ${profile.name || 'Not Provided'}
+- **Gender**: ${profile.gender || 'Not Provided'}
+- **Birthday**: ${profile.birthday || 'Not Provided'}
+- **Contact**: ${profile.phone || 'N/A'} | ${profile.email || 'N/A'}
+- **Original Skills (Reference)**: ${(profile.skills || []).join(', ')}
+- **AI Instruction**: ${profile.aiMessage || 'None'}
 - **Earliest Start Date**: ${earliestWorkDate} (Cannot be earlier than this)
 
 ### 3. Work Experience Analysis
@@ -79,7 +82,7 @@ ${needsSupplement ? `
 **Total years to add**: ${supplementYears} years
 
 **Specific Time Segments for Supplement (Follow Strictly):**
-${supplementSegments.map((seg, idx) => `
+${(supplementSegments || []).map((seg, idx) => `
 Supplement ${idx + 1}:
 - Period: ${seg.startDate} to ${seg.endDate} (${seg.years} years)
 - Company Name: Generate a realistic English studio/company name fitting the "${targetTitle}" domain.
@@ -95,9 +98,10 @@ Supplement ${idx + 1}:
 `).join('\n')}
 
 **⚠️ Global Timeline (Reverse Chronological - Newest First):**
-${allWorkExperiences.map((exp, idx) => {
+${(allWorkExperiences || []).map((exp, idx) => {
   if (exp.type === 'existing') {
-    const origExp = profile.workExperiences[exp.index!];
+    const origExp = (profile.workExperiences || [])[exp.index!];
+    if (!origExp) return `${idx + 1}. [Existing Data Missing] - ${exp.startDate} to ${exp.endDate}`;
     return `${idx + 1}. [Existing] ${origExp.company} - ${origExp.startDate} to ${origExp.endDate}`;
   } else {
     return `${idx + 1}. [Supplement] [Generate Studio Name] - ${exp.startDate} to ${exp.endDate}`;
@@ -113,14 +117,14 @@ ${allWorkExperiences.map((exp, idx) => {
 ` : 'Actual experience meets requirements. No supplement needed.'}
 
 ### 5. Existing Work Experience (Reshape based on Business Direction)
-**⚠️ CRITICAL: Company names MUST remain unchanged** (keep originals like "${profile.workExperiences[0]?.company || 'Huya'}").
+**⚠️ CRITICAL: Company names MUST remain unchanged** (keep originals like "${(profile.workExperiences || [])[0]?.company || 'Huya'}").
 
-${profile.workExperiences.map((exp, i) => `
+${(profile.workExperiences || []).map((exp, i) => `
 Experience ${i + 1}:
 - Company: ${exp.company} (DO NOT CHANGE)
 - Original Title: ${exp.jobTitle}
 - Business Direction: ${exp.businessDirection}
-- Work Content: ${exp.workContent || "None"} (Low weight reference: Use only if highly relevant to ${targetTitle}; otherwise IGNORE and regenerate based on target)
+- Work Content: ${exp.workContent || "None"} (Low weight reference: Use only if highly relevant to ${targetTarget}; otherwise IGNORE and regenerate based on target)
 - Time: ${exp.startDate} to ${exp.endDate} (DO NOT CHANGE)
 `).join('\n')}
 
@@ -155,10 +159,10 @@ Experience ${i + 1}:
   "workExperience": [
     ${needsSupplement ? `// Follow the timeline strictly
     // Example order:
-${allWorkExperiences.map((exp, idx) => {
+${(allWorkExperiences || []).map((exp, idx) => {
   if (exp.type === 'existing') {
-    const origExp = profile.workExperiences[exp.index!];
-    return `    // ${idx + 1}. [Existing] ${origExp.company}`;
+    const origExp = (profile.workExperiences || [])[exp.index!];
+    return `    // ${idx + 1}. [Existing] ${origExp?.company || 'Unknown'}`;
   } else {
     return `    // ${idx + 1}. [Supplement] [Studio Name]`;
   }
