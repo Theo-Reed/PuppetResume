@@ -62,9 +62,9 @@ export class ResumeAIService {
     const calcResult = ExperienceCalculator.calculate(profile, job);
     
     // 3. 准备排版元数据
-    // 根据 614px 内容宽度 (694-40-40) 和 14px 字号计算
-    // 614 / 14 = 43.8, 取 44 较为稳妥
-    const maxCharPerLine = isEnglish ? 90 : 44; 
+    // 根据 594px 净文本宽度 (694-40-40-20) 和 14px 字号计算
+    // 594 / 14 = 42.42, 取 42 较为精准
+    const maxCharPerLine = isEnglish ? 90 : 42; 
     
     // Destructure for Prompt Construction
     const { 
