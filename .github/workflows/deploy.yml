@@ -3,7 +3,7 @@ name: Auto Deploy
 on:
   push:
     branches:
-      - main  # 当你向 main 分支推送代码时触发
+      - master  # 当你向 main 分支推送代码时触发
 
 jobs:
   deploy:
