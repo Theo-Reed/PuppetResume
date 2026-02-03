@@ -55,23 +55,29 @@ export class ResumeGenerator {
 
       switch (cycleIndex) {
           case 0: // Matches Job 1, 4, 7...
-              // Style: Skills 1 Col, 4 Cats, 4 Items
+              // Style: Skills 1 Col, 4 Cats, 4 Items (Certs: 3 Items)
               strategy = {
                   targetPages: targetPages,
                   skillColumns: 1,
                   skillCategories: 4,
                   skillItemsPerCat: 4
               };
+              if (hasCertificates) {
+                  strategy.skillItemsPerCat = 3;
+              }
               break;
               
           case 1: // Matches Job 2, 5, 8...
-              // Style: Skills 2 Cols, 4 Cats, 4 Items
+              // Style: Skills 2 Cols, 4 Cats, 4 Items (Certs: 3 Items)
               strategy = {
                   targetPages: targetPages,
                   skillColumns: 2,
                   skillCategories: 4,
                   skillItemsPerCat: 4
               };
+              if (hasCertificates) {
+                   strategy.skillItemsPerCat = 3;
+              }
               break;
               
           case 2: // Matches Job 3, 6, 9...
@@ -84,6 +90,7 @@ export class ResumeGenerator {
               };
               if (hasCertificates) {
                   strategy.skillCategories = 4;
+                  strategy.skillItemsPerCat = 3;
               }
               break;
               
@@ -391,55 +398,23 @@ export class ResumeGenerator {
    */
   private async applySmartPageBreaks(page: Page): Promise<void> {
     try {
-      await page.evaluate(`
-        (function() {
-          const PAGE_HEIGHT = 1123;
-          const DANGER_ZONE = 120; // 底部 120px 为危险区域
+      await page.evaluate((PAGE_HEIGHT) => {
+        const DANGER_ZONE = 100; // 底部 100px 为危险区域
+        
+        const items = document.querySelectorAll('.work-item, .education-item, .project-item, .section-title');
+        
+        items.forEach(item => {
+          const rect = item.getBoundingClientRect();
+          const currentTop = rect.top + window.scrollY; // Absolute Top
           
-          // 获取所有可能包含标题的主要区块
-          // 根据模板结构，只需要处理主要的块级元素，不需要处理单独的 section-title，
-          // 因为 section-title 通常紧跟内容，推 section-title 即可。
-          // 重点防止 work-item, education-item, project-item 的头部掉在底下
-          const items = document.querySelectorAll('.work-item, .education-item, .project-item, .section-title');
+          const topInPage = currentTop % PAGE_HEIGHT;
           
-          let totalShift = 0;
-          
-          items.forEach(item => {
-            // Get original metrics
-            const rect = item.getBoundingClientRect();
-            // Since we haven't forced layout recalc, rect is still valid for original state
-            // But we must account for previous shifts
-            
-            const originalTop = rect.top + window.scrollY; // Absolute Top
-            const currentTop = originalTop + totalShift;   // Where it would be now
-            
-            const topInPage = currentTop % PAGE_HEIGHT;
-            
-            // Check: Danger Zone
-            // Also check if we are VERY close to top (e.g. < 40px), which means we just got pushed? 
-            // No, the mod logic handles that. 2246 % 1123 = 0.
-            
-            if (topInPage > (PAGE_HEIGHT - DANGER_ZONE)) {
-               // 改为使用 break-before: always 安全地强制换行
-               // 避免手动计算 margin-top 导致的空白间距问题
-               item.style.breakBefore = 'always';
-               // style.marginTop = ... // No longer needed
-               item.style.marginTop = '0px'; // Reset margin if any
-               
-               // Adjust shift? 
-               // If we force page break, the element moves to Top of Next Page.
-               // The space on previous page is left empty (natural).
-               // We don't need to track 'totalShift' for *this* element's gap, 
-               // but subsequent elements will be shifted relative to the document flow.
-               
-               // Actually, calculating 'totalShift' becomes hard if we use breakBefore, 
-               // because we don't know exactly how much space was cleared.
-               // But usually, smart page breaks are applied ONCE at the end.
-               // We don't need accurate subsequent metrics if we are just patching orphans.
-            }
-          });
-        })();
-      `);
+          if (topInPage > (PAGE_HEIGHT - DANGER_ZONE)) {
+             (item as HTMLElement).style.breakBefore = 'always';
+             (item as HTMLElement).style.marginTop = '0px'; 
+          }
+        });
+      }, this.A4_USABLE_HEIGHT);
       
       // 等待重新布局
       await new Promise(resolve => setTimeout(resolve, 300));
@@ -594,6 +569,11 @@ export class ResumeGenerator {
   private formatText(text: string): string {
     if (!text) return '';
     
+    // 先处理换行符，将 \n\n 转为双换行标识，\n 转为单换行标识
+    // 这样可以确保 AI 返回的段落结构在模板中得以体现
+    text = text.replace(/\n\n/g, '<br/><br/>');
+    text = text.replace(/\n/g, '<br/>');
+
     // 使用占位符保护格式化标签，避免被转义
     const placeholders: { [key: string]: string } = {};
     let placeholderIndex = 0;
@@ -627,7 +607,7 @@ export class ResumeGenerator {
     });
     
     // 处理 <br> 标签 (换行)
-    // 用户需求: "正常行再加5rpx" -> 使用 div 产生块级换行，并附加 5px 的垂直间距
+    // 用户需求: 换行时增加小幅垂直间距，使排版不拥挤
     text = text.replace(/<br\s*\/?>/gi, (match) => {
       const key = getPlaceholder('BR');
       placeholders[key] = '<div style="height: 5px;"></div>';
@@ -710,6 +690,12 @@ export class ResumeGenerator {
     `;
   }
 
+  // A4 Standard at 96 DPI: 210mm x 297mm => 793.7px x 1122.52px
+  // Usable height = 1122.52 - (40px top + 40px bottom) = 1042.52px
+  // Use 1042.5 which is exactly 1122.52 - 80 (top/bottom margins)
+  private readonly A4_USABLE_HEIGHT = 1042.5; 
+  private readonly ORPHAN_THRESHOLD = 80; // 标题下方至少预留的空间
+
   /**
    * 评估当前布局质量
    * 返回: { pageCount, fillRatio, hasOrphans, details }
@@ -720,10 +706,18 @@ export class ResumeGenerator {
     hasOrphans: boolean,
     details: string
   }> {
-     return await page.evaluate(() => {
-        const PAGE_HEIGHT = 1040; // Adjusted for @page margins (1123 - 80)
-        // 使用 documentElement.scrollHeight 通常比 body 更准确，包含 margin
-        const totalHeight = document.documentElement.scrollHeight;
+     return await page.evaluate((PAGE_HEIGHT) => {
+        // 使用最后一个可见元素的底部来计算真实占用页数，而不是 scrollHeight
+        // scrollHeight 不包含分页产生的空白
+        const allItems = Array.from(document.querySelectorAll('.header, .section, .work-item, .responsibility-item, .skill-item, .certificate-item'));
+        let maxBottom = 0;
+        allItems.forEach(el => {
+            const rect = el.getBoundingClientRect();
+            const bottom = rect.bottom + window.scrollY;
+            if (bottom > maxBottom) maxBottom = bottom;
+        });
+
+        const totalHeight = maxBottom;
         const pageCount = Math.ceil(totalHeight / PAGE_HEIGHT);
         
         // 计算最后一页填充率
@@ -733,30 +727,21 @@ export class ResumeGenerator {
         let hasOrphans = false;
         let details = "";
         
-        // 检查标题孤儿：标题在页面底部 100px 内 (Danger Zone)
-        // 这些标题如果出现在页面最底端，说明下面的内容被切分由于分页到了下一页，Title 留在上一页底 -> 孤儿
+        // 检查标题孤儿：标题在页面底部 80px 内 (Danger Zone)
         const headers = document.querySelectorAll('.section-title, .work-header, .education-header');
         headers.forEach((h) => {
              const rect = h.getBoundingClientRect();
-             // 页面累积高度 + 元素相对视口高度 = 绝对高度
-             // 在 puppeteer 渲染中，如果不发生滚动，rect.top 就是绝对 top。
-             // 稳妥起见，假设 document flow 是从 0 开始。
              const absoluteTop = rect.top + window.scrollY; 
              
              const topInPage = absoluteTop % PAGE_HEIGHT;
-             // 如果标题距离页尾 < 100px
-             if (topInPage > (PAGE_HEIGHT - 100)) {
+             if (topInPage > (PAGE_HEIGHT - 80)) {
                  hasOrphans = true;
                  details += `Orphan Header at px ${Math.round(absoluteTop)} (Page Bottom); `;
              }
         });
 
-        // 检查分割孤儿：Work Item 刚开始第一行就在页尾
-        // 或者 Work Item 只有最后一行在下一页页头 (Pagination Orphans/Widows)
-        // 这是一个简单的 Checks
-        
         return { pageCount, fillRatio, hasOrphans, details };
-     });
+     }, this.A4_USABLE_HEIGHT);
   }
 
   /**
@@ -778,10 +763,9 @@ export class ResumeGenerator {
 
       console.log(`[Layout Strategy] Jobs: ${jobCount}, HasCerts: ${hasCertificates}, TargetPages: ${targetPages}, SkillCols: ${strategy.skillColumns}, SkillCats: ${strategy.skillCategories}, ItemsPerCat: ${strategy.skillItemsPerCat}`);
 
-      const PAGE_HEIGHT = 1000; 
+      const PAGE_HEIGHT = this.A4_USABLE_HEIGHT;
 
       // Step A: 渲染这个 Strategy 下的 "Max Content" (所有 job 设为 100) 以获取 Metric
-      // 注意：generateHTML 会用到 strategy，所以 metrics 里的 Professional Skills 高度将是正确的。
       const maxConfig = new Array(numJobs).fill(100);
       const calibOps: RenderOptions = { jobConfig: maxConfig, strategy: strategy };
       const calibHtml = this.generateHTML(data, calibOps);
@@ -806,18 +790,52 @@ export class ResumeGenerator {
           let currentY = 0;
           
           // Helper: Add Block relative to natural flow
-          // Note: We use strict order of traversal
           const addBlock = (el: Element, type: string, label: string, extra?: any) => {
                const rect = el.getBoundingClientRect();
                const top = rect.top + window.scrollY;
                
+               // Gap Detection
                if (top > currentY && currentY > 0) {
                    const gap = top - currentY;
-                   if (gap > 1) blocks.push({ type: 'gap', height: gap, label: `Gap before ${label}` });
+                   if (gap > 1) {
+                       // Associate gap with the *next* element if the next element is a bullet
+                       // This ensures if the bullet is pruned, the gap is also pruned.
+                       const gapExtra = (extra && extra.bulletIndex !== undefined) 
+                            ? { jobIndex: extra.jobIndex, bulletIndex: extra.bulletIndex } 
+                            : {};
+                       
+                       blocks.push({ 
+                           type: 'gap', 
+                           height: gap, 
+                           label: `Gap before ${label}`,
+                           ...gapExtra
+                       });
+                   }
                }
-               // Note: If jumping back (e.g. floats), ignore? Resume is linear.
                
-               blocks.push({ type: type, height: rect.height, label: label, ...extra });
+               // Danger Zone Check: Check if this element triggers Smart Break logic
+               // Selector matches ensureSmartPageBreaks: .work-item, .education-item, .project-item, .section-title
+               // Note: We are adding specific elements. 
+               // If type is 'job_header', its parent is .work-item.
+               // If type is 'static' and matches .section-title or .education-item
+               let hasDangerZoneRule = false;
+               if (el.matches('.section-title') || el.matches('.education-item') || el.matches('.project-item')) {
+                   hasDangerZoneRule = true;
+               } 
+               // Special case for Work Item: addBlock is called on work-header, but the wrapper .work-item triggers the rule.
+               // Since work-header is at top of work-item, their positions are identical.
+               if (type === 'job_header') {
+                   hasDangerZoneRule = true; 
+               }
+
+               blocks.push({ 
+                   type: type, 
+                   height: rect.height, 
+                   label: label, 
+                   hasDangerZoneRule: hasDangerZoneRule,
+                   ...extra 
+               });
+               
                currentY = top + rect.height;
           };
           
@@ -916,10 +934,7 @@ export class ResumeGenerator {
       // A4 Height = 1123px. 
       // Template has @page { margin: 40px 50px; }
       // So available vertical space is roughly 1123 - 40 - 40 = 1043px.
-      // Use conservative value to ensure fit.
-      // Use conservative value to ensure fit (defined at top of function).
-
-      // const ORPHAN_THRESHOLD = 90; // (Used inside simulation if check needed)
+      // We use a safe value (1020px) to account for browser rendering variations and page breaks.
 
       // Helpers
       const allBullets = allBlocks.filter(b => b.type === 'job_bullet');
@@ -939,18 +954,48 @@ export class ResumeGenerator {
       // Step C: Simulation Logic (Reused for Strategy)
       const simulateLayout = (config: number[]) => {
           const activeBlocks = allBlocks.filter(b => {
-               if (b.type === 'job_bullet') {
+               if (b.type === 'job_bullet' || (b.type === 'gap' && b.bulletIndex !== undefined)) {
+                   // If it's a bullet OR a gap associated with a bullet
                    if (typeof b.jobIndex !== 'number') return false;
+                   // Use config to decide visibility
                    return (b.bulletIndex ?? 0) < (config[b.jobIndex] ?? 0);
                }
-               return true; // Static blocks always active
+               return true; // Static blocks (and unassociated gaps) always active
           });
 
           let currentY = 0;
           let pageNum = 1;
+          const DANGER_ZONE = 100; // Must match applySmartPageBreaks
           
-          for (const blk of activeBlocks) {
-              if (currentY + blk.height > PAGE_HEIGHT) {
+          for (let i = 0; i < activeBlocks.length; i++) {
+              const blk = activeBlocks[i];
+              
+              // 孤儿处理逻辑 (Unbreakable Groups):
+              // 如果当前块是工作标题(job_header)，它必须与其下方的第一个小点(job_bullet)在同一页
+              let blockGroupHeight = blk.height;
+              if (blk.type === 'job_header' && i + 1 < activeBlocks.length) {
+                  const nextBlk = activeBlocks[i+1];
+                  if (nextBlk.type === 'job_bullet') {
+                      blockGroupHeight += nextBlk.height;
+                  }
+              }
+
+              // Danger Zone Logic (Replica of CSS enforcement)
+              // If this block has a rule, and it STARTS in the danger zone, it WILL be pushed.
+              if (blk.hasDangerZoneRule) {
+                   const spaceRemaining = PAGE_HEIGHT - currentY;
+                   if (spaceRemaining < DANGER_ZONE) {
+                       // Force Break based on Danger Zone
+                       pageNum++;
+                       currentY = 0; // New page starts fresh
+                       // Note: We ignore the gap before this block because the break consumes the space.
+                       // The block adds its height to the new page.
+                   }
+              }
+
+              // Standard Overflow Check
+              if (currentY + blockGroupHeight > PAGE_HEIGHT) {
+                  // 强制分页
                   pageNum++;
                   currentY = blk.height; 
               } else {
@@ -1025,11 +1070,12 @@ export class ResumeGenerator {
 
       // Calculate Final Stats
       const finalSim = simulateLayout(currentConfig);
-      const spaceLeft = PAGE_HEIGHT - finalSim.lastPageHeight;
-      const fillPercent = ((spaceLeft / PAGE_HEIGHT) * 100).toFixed(1);
+      const totalAvailable = targetPages * PAGE_HEIGHT;
+      const totalUsed = ((finalSim.pages - 1) * PAGE_HEIGHT) + finalSim.lastPageHeight;
+      const fillPercent = ((totalUsed / totalAvailable) * 100).toFixed(1);
 
       console.log(`3. 最佳填充方案: [${currentConfig}]`);
-      console.log(`4. 尾部留白: ${fillPercent}%`);
+      console.log(`4. 总体填充率: ${fillPercent}%`);
       console.log(`=====================\n`);
 
       console.log(`[Solver] Initial Computed Config: [${currentConfig}] for Target Pages: ${targetPages}`);

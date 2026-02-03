@@ -62,7 +62,9 @@ export class ResumeAIService {
     const calcResult = ExperienceCalculator.calculate(profile, job);
     
     // 3. 准备排版元数据
-    const maxCharPerLine = isEnglish ? 90 : 48; // 中文 CPL 约 48
+    // 根据 614px 内容宽度 (694-40-40) 和 14px 字号计算
+    // 614 / 14 = 43.8, 取 44 较为稳妥
+    const maxCharPerLine = isEnglish ? 90 : 44; 
     
     // Destructure for Prompt Construction
     const { 

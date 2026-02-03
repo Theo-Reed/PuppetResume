@@ -12,6 +12,7 @@
     "dev:example:without-avatar": "ts-node src/index.ts without-avatar",
     "dev:test-data": "ts-node src/index.ts test-data",
     "test:gemini": "ts-node src/geminiService.ts",
+    "test:full": "ts-node tests/full_flow_test.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
