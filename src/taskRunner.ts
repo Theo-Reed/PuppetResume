@@ -48,14 +48,20 @@ export async function runBackgroundTask(taskId: string, payload: GenerateFromFro
  */
 async function executeTask(taskId: string, payload: GenerateFromFrontendRequest, services: TaskServices) {
   const { db } = services;
-  console.log(`\n🚀 [Task ${taskId}] 后台任务启动 (并发通道已占用)...`);
+  console.log(`\n🚀 [Task ${taskId}] 后台任务启动...`);
 
   if (!db) {
-    console.error(`[Task ${taskId}] ❌ 无法启动后台任务：数据库未初始化`);
+    console.error(`[Task ${taskId}] ❌ 数据库未就绪`);
     return;
   }
 
-  // 1. 准备本地服务实例 (以 tests/full_flow_test.ts 为基准，每次任务使用独立实例)
+  // 0. 状态二次确认：如果任务在排队期间已被清理（如重启），则不再执行
+  const currentTask = await db.collection(COLLECTION_RESUMES).findOne({ task_id: taskId });
+  if (!currentTask || currentTask.status === 'failed') {
+      console.log(`⚠️ [Task ${taskId}] 任务已被标记为失效，放弃执行。`);
+      return;
+  }
+
   const aiService = new ResumeAIService();
   const generator = new ResumeGenerator();
 

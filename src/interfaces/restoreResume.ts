@@ -48,6 +48,15 @@ router.post('/restoreResume', async (req: Request, res: Response) => {
         return res.status(404).json({ success: false, message: 'Resume record not found' });
     }
 
+    // 新增：如果已经在处理中，直接返回
+    if (resume.status === 'processing') {
+        return res.json({
+            success: true,
+            message: 'Restoration already in progress',
+            taskId: resume.task_id
+        });
+    }
+
     // 3. 检查物理文件是否真的不在了 (双重检查)
     if (resume.fileUrl) {
         const fileName = path.basename(resume.fileUrl);

@@ -130,15 +130,24 @@ async function startServer() {
     db = await connectToLocalMongo();
     console.log('✅ 使用本地 MongoDB 作为默认数据库');
 
-    // 🚀 Step 2: 启动时清理僵死任务
+    // 🚀 Step 2: 建立必要索引（即使已存在也会跳过，保证查询效率）
+    const usersColl = db.collection('users');
+    await usersColl.createIndex({ openid: 1 }, { unique: true });
+    
+    const resumesColl = db.collection('generated_resumes');
+    await resumesColl.createIndex({ openid: 1 });
+    await resumesColl.createIndex({ task_id: 1 });
+    await resumesColl.createIndex({ jobId: 1 });
+
+    // 🚀 Step 3: 启动时清理僵死任务
     // 如果服务器异常重启，之前的 processing 任务将永远卡住，需统一重置
-    await db.collection(COLLECTION_RESUMES).updateMany(
+    await resumesColl.updateMany(
       { status: 'processing' },
       { $set: { status: 'failed', error: 'Server Reboot Cleaned' } }
     );
     console.log('🧹 启动前任务清理完成');
 
-    // 🚀 Step 3: 清理过期物理文件
+    // 🚀 Step 4: 清理过期物理文件
     cleanupExpiredPdfs();
     // 每小时运行一次清理
     setInterval(cleanupExpiredPdfs, 60 * 60 * 1000);
