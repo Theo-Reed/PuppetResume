@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
-import { ensureUser } from '../userUtils';
+import { ensureUser, isTestUser } from '../userUtils';
 import { ObjectId } from 'mongodb';
 
 import { hasWxConfig, getMiniProgramPaymentParams } from '../wechat-pay';
@@ -37,8 +37,13 @@ router.post('/createOrder', async (req: Request, res: Response) => {
     const currentLevel = currentMembership.level || 0;
     const targetLevel = scheme.level;
 
-    // Upgrade Logic: Higher level subscription + Currently Active
-    if (scheme.type !== 'topup' && isMemberActive && targetLevel > currentLevel) {
+    // Special Logic: Test Users pay 1 cent (0.01 CNY)
+    const testUser = await isTestUser(openid);
+    if (testUser) {
+        payAmount = 1; 
+        orderType = 'test';
+    } else if (scheme.type !== 'topup' && isMemberActive && targetLevel > currentLevel) {
+        // Upgrade Logic: Higher level subscription + Currently Active
         orderType = 'upgrade';
         
         // Find current scheme for deduction

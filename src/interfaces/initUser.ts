@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { ensureUser } from '../userUtils';
+import { ensureUser, isTestUser } from '../userUtils';
 
 const router = Router();
 
@@ -18,12 +18,15 @@ router.post('/initUser', async (req: Request, res: Response) => {
     if (!user) {
       return res.status(500).json({ success: false, message: 'User initialization failed' });
     }
+
+    const testUser = await isTestUser(openid);
     
     res.json({
       success: true, 
       result: {
         openid: (user as any).openid,
-        user: user
+        user,
+        isTestUser: testUser
       }
     });
   } catch (error) {

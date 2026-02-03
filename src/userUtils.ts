@@ -109,3 +109,13 @@ export async function ensureUser(openid: string, userInfo: any = {}) {
 
   return result;
 }
+
+/**
+ * 检查用户是否在测试用户白名单中
+ */
+export async function isTestUser(openid: string): Promise<boolean> {
+  if (!openid) return false;
+  const db = getDb();
+  const count = await db.collection('test_users').countDocuments({ openid });
+  return count > 0;
+}
