@@ -3,7 +3,8 @@ name: Auto Deploy
 on:
   push:
     branches:
-      - master  # 检查你的分支名是 master 还是 main，建议对齐
+      - master
+  workflow_dispatch: # 允许手动触发
 
 jobs:
   deploy:
