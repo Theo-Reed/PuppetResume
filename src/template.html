@@ -204,22 +204,23 @@
         }
         
         .skill-category {
-            margin-bottom: 25px;
+            margin-bottom: 10px; /* 减少底部边距，防止在 Grid 中累加过大 */
         }
         
         .skill-category-title {
             font-size: 16px;
             font-weight: bold;
             color: #2c3e50;
-            margin-bottom: 18px; /* 增加到 18px，更接近工作经历的 20px 间距 */
+            margin-bottom: 15px; /* 从 18px 调整为 15px */
         }
 
-        /* Grid Container (Style will be overridden by inline style from generator) */
+        /* Grid Container */
         .skills-grid {
             display: grid;
-            grid-template-columns: 1fr; /* Default fallback */
+            grid-template-columns: 1fr; 
             column-gap: 30px; 
-            row-gap: 0px; 
+            row-gap: 15px; /* 使用 row-gap 代替子元素的 margin-bottom，更容易控制 */
+            margin-bottom: 0; /* 依靠后一个 section 的 margin-top */
         }
 
         /* 恢复为默认列表样式（因为外层已经是两栏了） */
@@ -356,9 +357,7 @@
         <!-- 专业技能 -->
         <div class="section">
             <div class="section-title">{{TITLE_SKILLS}}</div>
-            <div class="skills-grid">
-                {{PROFESSIONAL_SKILLS}}
-            </div>
+            {{PROFESSIONAL_SKILLS}}
         </div>
         
         <!-- 证书 -->

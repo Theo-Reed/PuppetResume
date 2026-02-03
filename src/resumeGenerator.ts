@@ -781,6 +781,7 @@ export class ResumeGenerator {
           bulletIndex?: number;
           isOrphanable?: boolean;
           label?: string; // Debug Label
+          hasDangerZoneRule?: boolean; // New: Supports Danger Zone Simulation
       }
 
       // 在浏览器上下文中提取 Blocks (Granular)
