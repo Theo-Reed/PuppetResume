@@ -20,7 +20,7 @@ jobs:
           password: ${{ secrets.REMOTE_PASSWORD }}
           script: |
             # 1. 进入项目目录
-            cd /root/projects/puppet-resume || { echo "❌ Directory not found"; exit 1; }
+            cd /root/projects/PuppetResume || { echo "❌ Directory not found"; exit 1; }
             
             # 2. 强制同步代码
             echo "--- Git Syncing ---"

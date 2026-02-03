@@ -10,14 +10,10 @@ const router = Router();
 router.post('/payCallback', async (req: Request, res: Response) => {
     try {
         // 1. Verify Signature
-        // req.headers, req.body
-        // Note: Body must be valid JSON (handled by express.json middleware)
-        // But for verification, we might need RAW body?
-        // Usually express.json is fine as long as we stringify it back consistently or use raw buffer.
-        // For standard JSON bodies from WeChat, `JSON.stringify(req.body)` often works if no whitespace magic.
-        // Safest is to use a middleware to capture rawBody. But let's try with body.
+        // Using req.rawBody captured in server.ts to ensure bit-perfect verification
+        const rawBody = (req as any).rawBody ? (req as any).rawBody.toString('utf8') : JSON.stringify(req.body);
         
-        await verifyNotification(req.headers, req.body);
+        await verifyNotification(req.headers, rawBody);
         
         // 2. Decipher
         const { resource } = req.body;

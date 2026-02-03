@@ -108,10 +108,14 @@ export const getMiniProgramPaymentParams = async (
 export const verifyNotification = async (headers: any, bodyVal: any) => {
     const client = getWxPayClient();
     try {
+        // bodyVal could be the raw body string or the parsed object
+        // WeChat V3 verification strictly requires the original raw body string
+        const verifyBody = typeof bodyVal === 'string' ? bodyVal : JSON.stringify(bodyVal);
+
         await client.verify({
             timestamp: headers['wechatpay-timestamp'],
             nonce: headers['wechatpay-nonce'],
-            body: typeof bodyVal === 'string' ? bodyVal : JSON.stringify(bodyVal),
+            body: verifyBody,
             signature: headers['wechatpay-signature'],
             serial: headers['wechatpay-serial'],
         });
