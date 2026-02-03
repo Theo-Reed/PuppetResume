@@ -62,6 +62,14 @@ export async function ensureUser(openid: string, userInfo: any = {}) {
         if (m.resume_quota !== undefined) unsetObj['membership.resume_quota'] = '';
     }
     
+    // 3. Unify phone fields
+    if (!existingUser.phone && (existingUser.phoneNumber || existingUser.purePhoneNumber)) {
+        renameObj['phone'] = existingUser.purePhoneNumber || existingUser.phoneNumber;
+    }
+    if (existingUser.phoneNumber !== undefined) unsetObj['phoneNumber'] = '';
+    if (existingUser.purePhoneNumber !== undefined) unsetObj['purePhoneNumber'] = '';
+    if (existingUser.countryCode !== undefined) unsetObj['countryCode'] = '';
+    
     if (Object.keys(renameObj).length > 0 || Object.keys(unsetObj).length > 0) {
       const updateOp: any = {};
       if (Object.keys(renameObj).length > 0) updateOp.$set = renameObj;

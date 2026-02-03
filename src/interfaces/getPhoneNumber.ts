@@ -53,12 +53,15 @@ router.post('/getPhoneNumber', async (req: Request, res: Response) => {
       { openid: userOpenId },
       { 
         $set: { 
-          phone_info: phoneInfo,
-          phoneNumber: phoneInfo.phoneNumber,
-          purePhoneNumber: phoneInfo.purePhoneNumber,
-          countryCode: phoneInfo.countryCode,
+          phone: phoneInfo.purePhoneNumber, // 统一存放纯数字号码
+          phone_info: phoneInfo,           // 保留原始信息备份
           updatedAt: new Date()
-        } 
+        },
+        $unset: {
+          phoneNumber: "",
+          purePhoneNumber: "",
+          countryCode: ""
+        }
       },
       { upsert: true }
     );
