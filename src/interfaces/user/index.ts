@@ -6,6 +6,7 @@ import updateUserProfile from './updateUserProfile';
 import updateUserLanguage from './updateUserLanguage';
 import upload from './upload';
 import ocr from './ocr';
+import refineResume from './refineResume';
 
 const router = Router();
 
@@ -16,5 +17,6 @@ router.use(updateUserProfile);
 router.use(updateUserLanguage);
 router.use(upload);
 router.use(ocr);
+router.use(refineResume);
 
 export default router;
