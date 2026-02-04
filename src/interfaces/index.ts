@@ -28,7 +28,15 @@ apiRouter.use('/auth', auth);
 
 // 1. JWT 验证与身份映射中间件
 apiRouter.use(async (req, res, next) => {
-  const skipList = ['/initUser', '/login', '/getPhoneNumber', '/auth', '/system-config'];
+  const skipList = [
+    '/initUser', 
+    '/login', 
+    '/getPhoneNumber', 
+    '/auth', 
+    '/system-config',
+    '/getPublicJobList',      // 允许未登录查看岗位列表
+    '/getFeaturedJobList'     // 允许未登录查看精选岗位列表（但点击查看详情可能需要登录）
+  ];
   if (skipList.some(path => req.path.includes(path))) {
     return next();
   }
