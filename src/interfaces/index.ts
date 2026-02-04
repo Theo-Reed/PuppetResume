@@ -1,19 +1,23 @@
 import { Router } from 'express';
-import resume from './resume';
-import membership from './membership';
-import user from './user';
-import jobs from './jobs';
-import search from './search';
-import system from './system';
+import resume from './resume/index';
+import membership from './membership/index';
+import user from './user/index';
+import jobs from './jobs/index';
+import search from './search/index';
+import system from './system/index';
 
 const router = Router();
 
-// Modular Routes
-router.use('/api', resume);
-router.use('/api', membership);
-router.use('/api', user);
-router.use('/api', jobs);
-router.use('/api', search); 
-router.use('/api', system);
+// Handle /api prefix
+const apiRouter = Router();
+
+apiRouter.use(resume);
+apiRouter.use(membership);
+apiRouter.use(user);
+apiRouter.use(jobs);
+apiRouter.use(search);
+apiRouter.use(system);
+
+router.use('/api', apiRouter);
 
 export default router;
