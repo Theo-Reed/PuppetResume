@@ -132,7 +132,14 @@ async function startServer() {
 
     // 🚀 Step 2: 建立必要索引（即使已存在也会跳过，保证查询效率）
     const usersColl = db.collection('users');
-    await usersColl.createIndex({ openid: 1 }, { unique: true });
+    // 使用 try-catch 避免因为索引冲突导致服务器无法启动，并改为与 init_db.js 一致的多元化索引
+    try {
+      await usersColl.createIndex({ openids: 1 }, { unique: true, sparse: true });
+      await usersColl.createIndex({ phone: 1 }, { unique: true, sparse: true });
+      await usersColl.createIndex({ openid: 1 }); // 兼容旧系统的 openid 字段
+    } catch (e) {
+      console.warn('⚠️ 用户索引设置可能存在冲突，但不影响启动:', e);
+    }
     
     const resumesColl = db.collection('generated_resumes');
     await resumesColl.createIndex({ openid: 1 });

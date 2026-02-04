@@ -103,6 +103,16 @@ async function main() {
     
     // User Indexes for Login Wall
     console.log('Creating user indexes...');
+    try {
+        await db.collection('users').dropIndex("phone_1");
+    } catch (e) {}
+    try {
+        await db.collection('users').dropIndex("openids_1");
+    } catch (e) {}
+    try {
+        await db.collection('users').dropIndex("openid_1");
+    } catch (e) {}
+    
     await db.collection('users').createIndex({ phone: 1 }, { unique: true, sparse: true });
     await db.collection('users').createIndex({ openids: 1 }, { unique: true, sparse: true });
     // Keep single openid field index for legacy logic support if needed, but not necessarily unique if transitioning
