@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { getWxPayClient } from '../../utils/wechatPay';
+import { getWxPayClient } from '../../wechat-pay';
 import { activateMembershipByOrder } from '../../services/membershipService';
 
 const router = Router();
