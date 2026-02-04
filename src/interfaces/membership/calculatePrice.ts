@@ -32,10 +32,9 @@ router.post('/calculatePrice', async (req: Request, res: Response) => {
     const targetLevel = scheme.level;
 
     if (scheme.type !== 'topup' && isMemberActive && targetLevel > currentLevel) {
-        let deduction = 0;
-        if (currentLevel === 1) deduction = 500;   // Value of Trial
-        if (currentLevel === 2) deduction = 990;   // Value of Sprint card
-        if (currentLevel === 3) deduction = 1990;  // Value of Standard card (Monthly)
+        // Find current scheme for deduction
+        const currentScheme = await schemesCol.findOne({ level: currentLevel, type: { $ne: 'topup' } });
+        const deduction = currentScheme ? currentScheme.price : 0;
 
         payAmount = Math.max(1, scheme.price - deduction);
         isUpgrade = true;

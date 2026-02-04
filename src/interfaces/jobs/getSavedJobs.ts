@@ -8,7 +8,7 @@ const router = Router();
 router.post('/getSavedJobs', async (req: Request, res: Response) => {
   try {
     const { skip = 0, limit = 20 } = req.body;
-    const openid = req.headers['x-openid'] as string;
+    const openid = req.headers['x-openid'] as string || req.body.openid;
 
     if (!openid) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
@@ -25,7 +25,7 @@ router.post('/getSavedJobs', async (req: Request, res: Response) => {
       { $limit: Number(limit) },
       {
         $lookup: {
-          from: 'jobs',
+          from: 'remote_jobs',
           let: { jobId: '$jobId' },
           pipeline: [
             {

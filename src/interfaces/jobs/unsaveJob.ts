@@ -7,7 +7,7 @@ const router = Router();
 router.post('/unsaveJob', async (req: Request, res: Response) => {
   try {
     const { jobId } = req.body;
-    const openid = req.headers['x-openid'] as string;
+    const openid = req.headers['x-openid'] as string || req.body.openid;
 
     if (!openid || !jobId) {
        return res.status(400).json({ success: false, message: 'Missing openid or jobId' });

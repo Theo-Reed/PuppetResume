@@ -6,7 +6,7 @@ const router = Router();
 
 router.post('/getJobDetail', async (req: Request, res: Response) => {
   try {
-    const { id, collection = 'jobs' } = req.body;
+    const { id, collection = 'remote_jobs' } = req.body;
     
     if (!id) {
         return res.status(400).json({ success: false, message: 'Missing id' });
@@ -15,8 +15,8 @@ router.post('/getJobDetail', async (req: Request, res: Response) => {
     const db = getDb();
     
     // Validate collection name to prevent security issues
-    const allowedCollections = ['jobs', 'featured_jobs', 'saved_jobs'];
-    const targetCollection = allowedCollections.includes(collection) ? collection : 'jobs';
+    const allowedCollections = ['remote_jobs', 'custom_jobs'];
+    const targetCollection = allowedCollections.includes(collection) ? collection : 'remote_jobs';
 
     let job;
     try {

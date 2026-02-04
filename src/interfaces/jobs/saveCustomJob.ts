@@ -10,7 +10,7 @@ const router = Router();
 router.post('/saveCustomJob', async (req: Request, res: Response) => {
   try {
     const { title, company, content, experience } = req.body;
-    const openid = req.headers['x-openid'] as string;
+    const openid = req.headers['x-openid'] as string || req.body.openid;
 
     if (!openid) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });

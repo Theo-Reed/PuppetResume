@@ -7,7 +7,7 @@ const router = Router();
 router.post('/checkJobSaved', async (req: Request, res: Response) => {
   try {
     const { jobId } = req.body;
-    const openid = req.headers['x-openid'] as string;
+    const openid = req.headers['x-openid'] as string || req.body.openid;
 
     if (!openid || !jobId) {
         return res.json({ success: true, result: { exists: false } });

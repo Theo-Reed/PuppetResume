@@ -102,9 +102,9 @@ async function main() {
     await db.collection('users').deleteMany({});
     await db.collection('users').createIndex({ openid: 1 }, { unique: true });
     
-    await db.collection('resumes').deleteMany({});
+    await db.collection('generated_resumes').deleteMany({});
     await db.collection('orders').deleteMany({});
-    await db.collection('search_conditions').deleteMany({});
+    await db.collection('saved_search_conditions').deleteMany({});
     await db.collection('saved_jobs').deleteMany({});
     
     // 建立索引
@@ -113,6 +113,10 @@ async function main() {
     await db.collection('orders').createIndex({ "expireAt": 1 }, { expireAfterSeconds: 0 });
     // 2. 提高订单查询效率
     await db.collection('orders').createIndex({ "openid": 1, "scheme_id": 1, "status": 1 });
+    // 3. 搜索条件索引
+    await db.collection('saved_search_conditions').createIndex({ "openid": 1, "tabIndex": 1 });
+    // 4. 收藏岗位唯一索引
+    await db.collection('saved_jobs').createIndex({ "openid": 1, "jobId": 1 }, { unique: true });
 
     console.log('Successfully initialized member_schemes and cleared data.');
   } finally {
