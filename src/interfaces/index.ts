@@ -20,12 +20,9 @@ router.use((req, res, next) => {
 
 // Root level health check
 router.get('/api/ping', (req, res) => res.send('pong'));
+router.post('/api/auth/test', (req, res) => res.json({ msg: 'auth test ok' }));
 
-// Debug: 打印所有注册的路由名 (可选)
 const apiRouter = Router();
-
-// 直接在这里把 loginByOpenid 挂死，看看到底行不行
-apiRouter.post('/auth/test', (req, res) => res.json({ msg: 'auth test ok' }));
 
 // Mount Auth routes first (no middleware interference)
 apiRouter.use('/auth', auth);
@@ -72,17 +69,11 @@ apiRouter.use(async (req, res, next) => {
 });
 
 // Modular Registration
-console.log('Mounting resume routes...');
 apiRouter.use(resume);
-console.log('Mounting user routes...');
 apiRouter.use(user);
-console.log('Mounting search routes...');
 apiRouter.use(search);
-console.log('Mounting membership routes...');
 apiRouter.use(membership);
-console.log('Mounting jobs routes...');
 apiRouter.use(jobs);
-console.log('Mounting system routes...');
 apiRouter.use(system);
 
 // Mount the apiRouter at /api
