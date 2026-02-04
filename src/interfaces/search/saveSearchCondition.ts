@@ -21,11 +21,14 @@ router.post('/saveSearchCondition', async (req: Request, res: Response) => {
     
     const timestamp = Date.now();
     
+    // Ensure tabIndex is stored as a number
+    const numericTabIndex = typeof tabIndex === 'string' ? parseInt(tabIndex, 10) : tabIndex;
+    
     const result = await collection.insertOne({
         openid: finalOpenid,
         searchKeyword,
         drawerFilter,
-        tabIndex,
+        tabIndex: numericTabIndex,
         createdAt: timestamp,
         updatedAt: timestamp
     });
