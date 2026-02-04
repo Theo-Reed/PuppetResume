@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { getEffectiveOpenid } from '../userUtils';
 
 // Modules
-import auth from './auth'; // New Auth Module
+import loginByOpenidRouter from './auth/loginByOpenid';
+import loginRouter from './auth/login';
+import registerRouter from './auth/register';
 import resume from './resume';
 import user from './user';
 import search from './search';
@@ -23,8 +25,10 @@ router.get('/api/ping', (req, res) => res.send('pong'));
 
 const apiRouter = Router();
 
-// 1. 无需鉴权的公共模块挂载 (扁平模式，由子模块内部声明 /auth 路径)
-apiRouter.use(auth);
+// 1. 无需鉴权的公共模块挂载
+apiRouter.use(loginByOpenidRouter);
+apiRouter.use(loginRouter);
+apiRouter.use(registerRouter);
 
 // 2. JWT 验证与身份映射中间件
 apiRouter.use(async (req, res, next) => {
