@@ -43,6 +43,7 @@ router.post('/getMemberSchemes', async (req: Request, res: Response) => {
     // Level: 0=Non, 1=Trial, 2=Sprint, 3=Standard, 4=Premium
     
     // Feature Sets (Bilingual)
+    const filler = { cn: "当前会员等级不变", en: "No change to current level", isDash: true };
     const F = {
         standardBenefits: [
             { cn: "全场景AI生成中英简历", en: "AI Resume (CN/EN)" },
@@ -56,24 +57,28 @@ router.post('/getMemberSchemes', async (req: Request, res: Response) => {
         ],
         upgradeToStandard: [
              { cn: "更长的会员时效", en: "Longer Validity" },
-             { cn: "更多的算力配额", en: "More Computing Quota" }
+             { cn: "更多的算力配额", en: "More Computing Quota" },
+             filler
         ],
         renewal: [
             { cn: "续费后配额累加", en: "Stackable Quota" },
-            { cn: "续费后时效累加", en: "Stackable Duration" }
+            { cn: "续费后时效累加", en: "Stackable Duration" },
+            filler
         ],
         topupGeneral: [
             { cn: "会员专享 额度不浪费", en: "Member Exclusive" },
-            { cn: "不限量叠加使用", en: "Unlimited Stacking" }
+            { cn: "不限量叠加使用", en: "Unlimited Stacking" },
+            filler
         ],
         topupEmergency: [
             { cn: "即刻恢复快速简历生成", en: "Restore Fast Generation" },
-            { cn: "即刻恢复高级算力模型", en: "Restore Advanced Model" }
+            { cn: "即刻恢复高级算力模型", en: "Restore Advanced Model" },
+            filler
         ]
     };
 
     schemes.forEach((s: any) => {
-        let feats: {cn:string, en:string}[] = [];
+        let feats: {cn:string, en:string, isDash?:boolean}[] = [];
         const sid = s.scheme_id;
 
         // Scenario 1: Non-Member (0) & Trial (1)
@@ -102,6 +107,14 @@ router.post('/getMemberSchemes', async (req: Request, res: Response) => {
 
         s.features_chinese = feats.map(f => f.cn);
         s.features_english = feats.map(f => f.en);
+        s.features_is_dash = feats.map(f => !!f.isDash);
+
+        // Final safety check: ensure 3 items
+        while (s.features_chinese.length < 3) {
+            s.features_chinese.push(filler.cn);
+            s.features_english.push(filler.en);
+            s.features_is_dash.push(true);
+        }
     });
 
     // 5. Sort Logic
