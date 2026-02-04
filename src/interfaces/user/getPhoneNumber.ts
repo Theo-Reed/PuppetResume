@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { getAccessToken } from '../../utils/wechatUtils';
 import { getDb } from '../../db';
+import { generateToken } from '../auth/utils';
 
 const router = Router();
 
@@ -134,13 +135,35 @@ router.post('/getPhoneNumber', async (req: Request, res: Response) => {
         );
     }
 
-    // 4. 返回结果
+    // 4. 获取最终用户信息并生成 Token
+    const finalUser = await usersCol.findOne({ 
+      $or: [{ openid: userOpenId }, { openids: userOpenId }] 
+    });
+
+    if (!finalUser) {
+      throw new Error('Failed to retrieve user after update');
+    }
+
+    const token = generateToken({ 
+      userId: finalUser._id.toString(), 
+      phoneNumber: finalUser.phone || '' 
+    });
+
     res.json({
       success: true,
       result: {
         ok: true,
         phone: phoneInfo.phoneNumber,
         countryCode: phoneInfo.countryCode
+      },
+      data: {
+        token,
+        user: {
+          _id: finalUser._id,
+          phone: finalUser.phone,
+          profile: finalUser.profile,
+          membership: finalUser.membership
+        }
       }
     });
 
