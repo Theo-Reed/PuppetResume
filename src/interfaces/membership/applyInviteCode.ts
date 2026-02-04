@@ -26,8 +26,9 @@ router.post('/applyInviteCode', async (req: Request, res: Response) => {
       return res.json({ success: false, message: '记录未找到' });
     }
 
-    if ((invitee as any).hasUsedInviteCode) {
-      return res.json({ success: false, message: '您已经填写过邀请码了' });
+    // 基础检查：是否已邀请过
+    if (invitee.hasUsedInviteCode) {
+      return res.json({ success: false, message: '该账户已被他人邀请，无法重复领取奖励' });
     }
 
     // 2. 找到邀请人 (邀请码现在区分大小写)
@@ -40,26 +41,29 @@ router.post('/applyInviteCode', async (req: Request, res: Response) => {
       return res.json({ success: false, message: '不能填写自己的邀请码' });
     }
 
-    // 3. 执行奖励逻辑（增加 3 天会员 + 5 点算力）
+    // 3. 执行奖励逻辑（双方各增加 3 天会员 + 5 点算力）
     const rewardDays = 3;
     const rewardPoints = 5;
 
-    // 更新受邀者
+    // --- A. 更新受邀者 (需要原子性操作防止重复领取) ---
     let inviteeBaseDate = new Date();
     if (invitee.membership?.expire_at && new Date(invitee.membership.expire_at) > inviteeBaseDate) {
         inviteeBaseDate = new Date(invitee.membership.expire_at);
     }
     const inviteeNewExpireAt = new Date(inviteeBaseDate.getTime() + rewardDays * 24 * 60 * 60 * 1000);
 
-    // 智能判断受邀者等级：如果不低于1级则保持原样，否则升级为1级
-    const currentInviteeLevel = (invitee as any).membership?.level || 0;
+    const currentInviteeLevel = invitee.membership?.level || 0;
     const newInviteeLevel = Math.max(currentInviteeLevel, 1);
 
-    await usersCol.updateOne(
-      { openid: invitee.openid },
+    const updateResult = await usersCol.updateOne(
+      { 
+        openid: invitee.openid, 
+        hasUsedInviteCode: { $ne: true } // 原子性锁：只有从未领取过时才更新
+      },
       { 
         $set: { 
           hasUsedInviteCode: true,
+          invitedBy: inviter.openid, // 审计追踪：记录谁邀请的
           'membership.expire_at': inviteeNewExpireAt,
           'membership.level': newInviteeLevel
         },
@@ -69,14 +73,18 @@ router.post('/applyInviteCode', async (req: Request, res: Response) => {
       }
     );
 
-    // 更新邀请人
+    // 如果 modifiedCount 为 0，说明在查询和更新之间已经被处理过了（并发冲突）
+    if (updateResult.modifiedCount === 0) {
+      return res.json({ success: false, message: '该账户已被他人邀请，无法重复领取奖励' });
+    }
+
+    // --- B. 更新邀请人 ---
     let inviterBaseDate = new Date();
     if (inviter.membership?.expire_at && new Date(inviter.membership.expire_at) > inviterBaseDate) {
         inviterBaseDate = new Date(inviter.membership.expire_at);
     }
     const inviterNewExpireAt = new Date(inviterBaseDate.getTime() + rewardDays * 24 * 60 * 60 * 1000);
 
-    // 智能判断邀请者等级：如果不低于1级则保持原样，否则升级为1级
     const currentInviterLevel = inviter.membership?.level || 0;
     const newInviterLevel = Math.max(currentInviterLevel, 1);
 
@@ -95,7 +103,7 @@ router.post('/applyInviteCode', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      message: `邀请码应用成功，双方各获得当前会员时长增加 ${rewardDays} 天及 ${rewardPoints} 点算力额度`,
+      message: `邀请成功！您与邀请人均已获得 ${rewardDays} 天会员及 ${rewardPoints} 点算力奖励`,
       result: { success: true }
     });
 
