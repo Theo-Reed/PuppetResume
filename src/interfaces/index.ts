@@ -60,11 +60,17 @@ apiRouter.use(async (req, res, next) => {
 });
 
 // Modular Registration
+console.log('Mounting resume routes...');
 apiRouter.use(resume);
+console.log('Mounting user routes...');
 apiRouter.use(user);
+console.log('Mounting search routes...');
 apiRouter.use(search);
+console.log('Mounting membership routes...');
 apiRouter.use(membership);
+console.log('Mounting jobs routes...');
 apiRouter.use(jobs);
+console.log('Mounting system routes...');
 apiRouter.use(system);
 
 // Mount the apiRouter at /api
