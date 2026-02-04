@@ -55,7 +55,31 @@ router.post('/createOrder', async (req: Request, res: Response) => {
     }
     // Note: Same level or Topup or Expired user pays full price (since they stack or restart)
 
-    // 3. Create Order
+    // 3. Check for existing UNPAID order for reuse
+    const existingOrder = await ordersCol.findOne({
+        openid,
+        scheme_id: scheme.scheme_id,
+        status: 'pending',
+        pay_amount: payAmount
+    });
+
+    if (existingOrder && (existingOrder as any).paymentParams) {
+        console.log('[Payment] Reusing existing order:', existingOrder._id);
+        return res.json({
+            success: true,
+            result: {
+                success: true,
+                order_id: existingOrder._id.toString(),
+                pay_amount: payAmount,
+                payment: (existingOrder as any).paymentParams
+            }
+        });
+    }
+
+    // 4. Create Order
+    const createdAt = new Date();
+    const expireAt = new Date(createdAt.getTime() + 2 * 60 * 60 * 1000); // 2 hours TTL (match WeChat prepay_id)
+
     const order = {
         _id: new ObjectId(),
         openid,
@@ -65,20 +89,15 @@ router.post('/createOrder', async (req: Request, res: Response) => {
         original_amount: scheme.price,
         pay_amount: payAmount,
         status: 'pending',
-        createdAt: new Date()
+        createdAt,
+        expireAt
     };
     
-    await ordersCol.insertOne(order);
-
     // --- Generate Payment Params ---
     let paymentParams;
     
     if (hasWxConfig()) {
         try {
-            // Amount in CENTS for WeChat Pay? SDK usually takes CNY units if object has currency, but standard is cents?
-            // wechatpay-node-v3 expects amount: { total, currency }
-            // total is int (cents).
-            
             paymentParams = await getMiniProgramPaymentParams(
                 `Membership-${(scheme.name_chinese || scheme.name)}`,
                 order._id.toString(),
@@ -90,15 +109,19 @@ router.post('/createOrder', async (req: Request, res: Response) => {
             return res.status(500).json({ success: false, message: 'Payment init failed: ' + err.message });
         }
     } else {
-        // Mock Payment Params for Dev/Test (Cases 1-13)
+        // Mock Payment Params for Dev/Test
         paymentParams = {
-            timeStamp: Date.now().toString(),
-            nonceStr: 'mock',
-            package: 'prepay_id=mock',
-            signType: 'MD5',
-            paySign: 'mock'
+            timeStamp: Math.floor(Date.now() / 1000).toString(),
+            nonceStr: 'mock_' + order._id.toString().slice(-6),
+            package: 'prepay_id=mock_' + order._id.toString(),
+            signType: 'RSA',
+            paySign: 'mock_sign'
         };
     }
+
+    // Save with payment params for future reuse
+    (order as any).paymentParams = paymentParams;
+    await ordersCol.insertOne(order);
 
     res.json({
       success: true,

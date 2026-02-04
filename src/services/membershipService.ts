@@ -92,8 +92,14 @@ export const activateMembershipByOrder = async (orderId: string) => {
     // Update User
     await usersCol.updateOne({ openid: order.openid }, update);
     
-    // Update Order Status if not already
-    await ordersCol.updateOne({ _id: new ObjectId(orderId) }, { $set: { status: 'paid', paidAt: new Date() } });
+    // Update Order Status and REMOVE expireAt to prevent TTL deletion
+    await ordersCol.updateOne(
+        { _id: new ObjectId(orderId) }, 
+        { 
+            $set: { status: 'paid', paidAt: new Date() },
+            $unset: { expireAt: "" } 
+        }
+    );
 
     return await usersCol.findOne({ openid: order.openid });
 };

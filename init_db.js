@@ -107,7 +107,14 @@ async function main() {
     await db.collection('search_conditions').deleteMany({});
     await db.collection('saved_jobs').deleteMany({});
     
-    console.log('Successfully initialized member_schemes and cleared users.');
+    // 建立索引
+    // 1. 订单自动清理索引： MongoDB 会根据 expireAt 字段的时间自动删除文档
+    // 我们设置 expireAfterSeconds: 0，意味着在 expireAt 那个时刻删除 (通常设为 2 小时)
+    await db.collection('orders').createIndex({ "expireAt": 1 }, { expireAfterSeconds: 0 });
+    // 2. 提高订单查询效率
+    await db.collection('orders').createIndex({ "openid": 1, "scheme_id": 1, "status": 1 });
+
+    console.log('Successfully initialized member_schemes and cleared data.');
   } finally {
     await client.close();
   }

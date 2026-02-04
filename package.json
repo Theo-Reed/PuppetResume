@@ -7,6 +7,7 @@
     "copy-assets": "copyfiles -u 1 src/template.html dist",
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
+    "db-init": "node init_db.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
