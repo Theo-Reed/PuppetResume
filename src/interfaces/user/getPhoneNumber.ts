@@ -146,6 +146,9 @@ router.post('/getPhoneNumber', async (req: Request, res: Response) => {
           phoneNumber: finalUser.phone, // 兼容前端对 phoneNumber 的引用
           profile: finalUser.profile,
           language: finalUser.language,
+          nickname: finalUser.nickname || '',
+          avatar: finalUser.avatar || '',
+          inviteCode: finalUser.inviteCode || '',
           membership: finalUser.membership
         }
       }

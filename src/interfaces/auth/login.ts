@@ -88,6 +88,10 @@ router.post('/loginByPhone', async (req: Request, res: Response) => {
           phoneNumber: user.phoneNumber,
           openids: updatedOpenids,
           language: user.language || 'Chinese',
+          nickname: user.nickname || '',
+          avatar: user.avatar || '',
+          membership: user.membership || { level: 0 },
+          inviteCode: user.inviteCode || '',
           profile: user.profile
         }
       }

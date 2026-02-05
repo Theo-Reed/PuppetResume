@@ -80,7 +80,11 @@ router.post('/register', async (req: Request, res: Response) => {
           _id: result.insertedId,
           phoneNumber,
           openids: newUser.openids,
-          language: 'Chinese'
+          language: 'Chinese',
+          nickname: '',
+          avatar: '',
+          membership: { level: 0 },
+          inviteCode: ''
         }
       }
     });
