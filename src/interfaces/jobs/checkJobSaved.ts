@@ -10,7 +10,7 @@ router.post('/checkJobSaved', async (req: Request, res: Response) => {
     const phoneNumber = (req as any).user.phoneNumber;
 
     if (!phoneNumber || !jobId) {
-        return res.json({ success: true, result: { exists: false } });
+        return res.json({ success: true, data: { exists: false } });
     }
 
     const db = getDb();
@@ -18,7 +18,7 @@ router.post('/checkJobSaved', async (req: Request, res: Response) => {
     
     res.json({
       success: true,
-      result: {
+      data: {
         exists: !!saved,
         _id: saved ? saved._id : null
       }

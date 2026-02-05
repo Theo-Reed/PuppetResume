@@ -49,9 +49,8 @@ router.post('/login', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      result: { 
+      data: { 
         openid
-        // user: user // No user object until authenticated via auth/login
       }
     });
 

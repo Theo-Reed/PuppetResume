@@ -29,7 +29,7 @@ router.post('/saveJob', async (req: Request, res: Response) => {
     
     res.json({
       success: true,
-      result: {
+      data: {
         errMsg: 'collection.add:ok'
       }
     });

@@ -25,7 +25,7 @@ export const getSavedSearchConditions = async (req: Request, res: Response) => {
     
     res.json({
       success: true,
-      result: {
+      data: {
         conditions: conditions || []
       }
     });

@@ -46,7 +46,7 @@ router.post('/getFeaturedJobList', async (req: Request, res: Response) => {
     
     res.json({
       success: true,
-      result: {
+      data: {
         ok: true,
         jobs: jobs
       }

@@ -146,7 +146,7 @@ router.post('/getMemberSchemes', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      result: {
+      data: {
         success: true,
         schemes: schemes,
         userScheme: userScheme // Return current scheme details

@@ -35,7 +35,7 @@ router.post('/getGeneratedResumes', async (req: Request, res: Response) => {
 
     res.json({
         success: true,
-        result: {
+        data: {
             data: resumes,
             total
         }

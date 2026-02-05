@@ -36,7 +36,7 @@ router.post('/searchJobs', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      result: {
+      data: {
         jobs: jobs
       }
     });
