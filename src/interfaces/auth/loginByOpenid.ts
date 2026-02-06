@@ -46,7 +46,7 @@ router.post('/loginByOpenid', async (req: Request, res: Response) => {
     res.json({
       success: true,
       code: StatusCode.SUCCESS,
-      data: {
+      result: {
         token,
         user: {
           _id: user._id,
@@ -58,7 +58,8 @@ router.post('/loginByOpenid', async (req: Request, res: Response) => {
           avatar: user.avatar || '',
           membership: user.membership || { level: 0 },
           inviteCode: user.inviteCode || '',
-          profile: user.profile
+          profile: user.profile,
+          isAuthed: !!(user.phone || user.phoneNumber)
         }
       }
     });

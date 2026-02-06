@@ -81,18 +81,20 @@ router.post('/loginByPhone', async (req: Request, res: Response) => {
     res.json({
       success: true,
       code: StatusCode.SUCCESS,
-      data: {
+      result: {
         token,
         user: {
           _id: user._id,
           phoneNumber: user.phoneNumber,
+          phone: user.phoneNumber,
           openids: updatedOpenids,
           language: user.language || 'AIChinese',
           nickname: user.nickname || '',
           avatar: user.avatar || '',
           membership: user.membership || { level: 0 },
           inviteCode: user.inviteCode || '',
-          profile: user.profile
+          profile: user.profile,
+          isAuthed: true
         }
       }
     });
