@@ -130,9 +130,9 @@ async function main() {
     // 2. 提高订单查询效率
     await db.collection('orders').createIndex({ "openid": 1, "scheme_id": 1, "status": 1 });
     // 3. 搜索条件索引
-    await db.collection('saved_search_conditions').createIndex({ "openid": 1, "tabIndex": 1 });
+    await db.collection('saved_search_conditions').createIndex({ "phoneNumber": 1, "tabIndex": 1 });
     // 4. 收藏岗位唯一索引
-    await db.collection('saved_jobs').createIndex({ "openid": 1, "jobId": 1 }, { unique: true });
+    await db.collection('saved_jobs').createIndex({ "phoneNumber": 1, "jobId": 1 }, { unique: true });
 
     console.log('Successfully initialized member_schemes and cleared data.');
   } finally {
