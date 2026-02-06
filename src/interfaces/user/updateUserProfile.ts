@@ -67,12 +67,6 @@ router.post('/updateUserProfile', async (req: Request, res: Response) => {
     const enRes = evaluateResumeCompleteness(enProfile, 'en');
     completenessUpdates['resume_profile.en.completeness'] = enRes;
 
-    // 额外的兼容性顶层字段更新 (可选，为了兼容旧代码)
-    completenessUpdates['resume_percent'] = zhRes.score;
-    completenessUpdates['resume_completeness'] = zhRes.level;
-    completenessUpdates['resume_percent_en'] = enRes.score;
-    completenessUpdates['resume_completeness_en'] = enRes.level;
-
     const secondUpdate = await usersCol.findOneAndUpdate(
       { _id: updatedUser._id },
       { $set: completenessUpdates },
