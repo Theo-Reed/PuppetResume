@@ -43,7 +43,6 @@ router.post('/calculatePrice', async (req: Request, res: Response) => {
     res.json({
       success: true,
       result: {
-        success: true,
         originalPrice: scheme.price,
         finalPrice: payAmount,
         isUpgrade: isUpgrade,
