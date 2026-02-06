@@ -58,6 +58,7 @@ export function evaluateResumeCompleteness(profile: any, lang: 'zh' | 'en') {
   if (!profile) return { score: 0, level: 0 };
   
   let score = 0;
+  const hasProfileData = Object.keys(profile).length > 0;
   
   // 1. 姓名: 10%
   if (profile.name) score += 10;
@@ -80,7 +81,6 @@ export function evaluateResumeCompleteness(profile: any, lang: 'zh' | 'en') {
   }
   
   // 5. 教育经历: 20%
-  // 兼容教育经历的复数 educations 和单数 education (AI 增强后的字段)
   const educations = profile.educations || profile.education;
   if (Array.isArray(educations) && educations.length > 0) score += 20;
   
@@ -99,6 +99,10 @@ export function evaluateResumeCompleteness(profile: any, lang: 'zh' | 'en') {
   // 9. AI 指令: 5%
   if (profile.aiMessage) score += 5;
   
+  if (hasProfileData) {
+     console.log(`[evaluateResumeCompleteness] Lang: ${lang}, Score: ${score}, Fields: ${Object.keys(profile).join(',')}`);
+  }
+
   // Level 1: 基础要求
   const hasName = !!profile.name;
   const hasEdu = Array.isArray(educations) && educations.length > 0;

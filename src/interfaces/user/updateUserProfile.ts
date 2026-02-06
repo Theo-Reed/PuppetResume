@@ -44,8 +44,7 @@ router.post('/updateUserProfile', async (req: Request, res: Response) => {
       { returnDocument: 'after' }
     );
 
-    // MongoDB Node Driver 6.x+ returns a result object { value: document, ok: 1 ... }
-    // but some versions or configurations return the document directly.
+    // MongoDB Node Driver 6.x+ behavior check
     const updatedUser: any = (result && (result as any).value) ? (result as any).value : result;
 
     if (!updatedUser) {
@@ -56,7 +55,7 @@ router.post('/updateUserProfile', async (req: Request, res: Response) => {
     const profile = updatedUser.resume_profile || {};
     const completenessUpdates: any = {};
     
-    // Calculate for both languages
+    // Ensure we are evaluating the latest data
     const zhProfile = profile.zh || {};
     const enProfile = profile.en || {};
 
@@ -66,15 +65,17 @@ router.post('/updateUserProfile', async (req: Request, res: Response) => {
     const enRes = evaluateResumeCompleteness(enProfile, 'en');
     completenessUpdates['resume_profile.en.completeness'] = enRes;
 
-    // Persist scores back to the user document
+    // Final update that includes the new scores
     const finalResult = await usersCol.findOneAndUpdate(
       { _id: updatedUser._id },
       { $set: completenessUpdates },
       { returnDocument: 'after' }
     );
     
-    // Determine the final user document to return
+    // Strictly extract the resulting document
     const finalUser = (finalResult && (finalResult as any).value) ? (finalResult as any).value : (finalResult || updatedUser);
+
+    console.log(`[updateUserProfile] Calculated scores for ${openid}: ZH ${zhRes.score}%, EN ${enRes.score}%`);
 
     res.json({
       success: true,
