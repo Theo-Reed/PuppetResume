@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../../db';
 import { comparePassword, generateToken } from './utils';
-import { StatusCode } from '../../constants/statusCodes';
+import { StatusCode, StatusMessage } from '../../constants/statusCodes';
 
 const router = Router();
 
@@ -25,8 +25,8 @@ router.post('/loginByPhone', async (req: Request, res: Response) => {
     if (!user) {
       return res.status(401).json({ 
         success: false, 
-        code: StatusCode.UNAUTHORIZED,
-        message: 'Invalid phone or password' 
+        code: StatusCode.INVALID_CREDENTIALS,
+        message: StatusMessage[StatusCode.INVALID_CREDENTIALS]
       });
     }
 
@@ -35,8 +35,8 @@ router.post('/loginByPhone', async (req: Request, res: Response) => {
     if (!user.password) {
        return res.status(401).json({ 
          success: false, 
-         code: StatusCode.UNAUTHORIZED,
-         message: 'Password not set. Please reset password.' 
+         code: StatusCode.INVALID_CREDENTIALS,
+         message: '未设置密码，请联系管理员或重置密码' 
        });
     }
 
@@ -44,8 +44,8 @@ router.post('/loginByPhone', async (req: Request, res: Response) => {
     if (!isMatch) {
       return res.status(401).json({ 
         success: false, 
-        code: StatusCode.UNAUTHORIZED,
-        message: 'Invalid phone or password' 
+        code: StatusCode.INVALID_CREDENTIALS,
+        message: StatusMessage[StatusCode.INVALID_CREDENTIALS]
       });
     }
 

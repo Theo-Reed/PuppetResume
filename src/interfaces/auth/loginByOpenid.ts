@@ -33,7 +33,7 @@ router.post('/loginByOpenid', async (req: Request, res: Response) => {
       return res.status(404).json({ 
         success: false, 
         code: StatusCode.USER_NOT_FOUND,
-        message: 'User not found' 
+        message: StatusMessage[StatusCode.USER_NOT_FOUND]
       });
     }
 
@@ -45,7 +45,6 @@ router.post('/loginByOpenid', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      code: StatusCode.SUCCESS,
       result: {
         token,
         user: {
@@ -69,7 +68,7 @@ router.post('/loginByOpenid', async (req: Request, res: Response) => {
     res.status(500).json({ 
       success: false, 
       code: StatusCode.INTERNAL_ERROR,
-      message: 'Internal server error' 
+      message: StatusMessage[StatusCode.INTERNAL_ERROR]
     });
   }
 });

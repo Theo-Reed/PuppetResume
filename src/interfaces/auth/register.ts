@@ -23,10 +23,10 @@ router.post('/register', async (req: Request, res: Response) => {
     // 1. Check if phone is already registered
     const existingUser = await usersCol.findOne({ phoneNumber });
     if (existingUser) {
-      return res.status(409).json({ 
+      return res.status(StatusCode.HTTP_CONFLICT).json({ 
         success: false, 
         code: StatusCode.USER_EXISTS,
-        message: 'Phone number already registered' 
+        message: StatusMessage[StatusCode.USER_EXISTS]
       });
     }
 

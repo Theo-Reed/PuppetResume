@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../../db';
+import { StatusCode, StatusMessage } from '../../constants/statusCodes';
 import { ensureUser } from '../../userUtils';
 
 const router = Router();
@@ -109,7 +110,7 @@ router.post('/applyInviteCode', async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('applyInviteCode error:', error);
-    res.status(500).json({ success: false, message: '服务器内部错误' });
+    res.status(500).json({ success: false, message: StatusMessage[StatusCode.INTERNAL_ERROR] });
   }
 });
 

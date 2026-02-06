@@ -4,6 +4,7 @@ import { getDb } from '../../db';
 import { ensureUser } from '../../userUtils';
 import { runBackgroundTask, TaskServices } from '../../taskRunner';
 import { GenerateFromFrontendRequest } from '../../types';
+import { StatusCode } from '../../constants/statusCodes';
 
 const router = Router();
 const COLLECTION_RESUMES = 'generated_resumes';
@@ -82,10 +83,10 @@ router.post('/generate', async (req: Request, res: Response) => {
       );
     } else {
       // Quota Exhausted
-      return res.status(403).json({ 
+      return res.status(StatusCode.HTTP_FORBIDDEN).json({ 
         success: false,
-        error: 'Quota exhausted', 
-        message: '您的算力点数已耗尽或会员已过期，请前往会员中心充值。' 
+        code: StatusCode.QUOTA_EXHAUSTED,
+        message: StatusMessage[StatusCode.QUOTA_EXHAUSTED]
       });
     }
     // --- Quota Check End ---

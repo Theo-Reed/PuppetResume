@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { StatusCode } from '../constants/statusCodes';
+import { StatusCode, StatusMessage } from '../constants/statusCodes';
 import { getEffectiveOpenid } from '../userUtils';
 
 // Modules
@@ -55,7 +55,7 @@ apiRouter.use(async (req, res, next) => {
     return res.status(401).json({ 
       success: false, 
       code: StatusCode.UNAUTHORIZED,
-      message: 'Access denied. No token provided.' 
+      message: StatusMessage[StatusCode.UNAUTHORIZED]
     });
   }
 
@@ -76,7 +76,7 @@ apiRouter.use(async (req, res, next) => {
     return res.status(403).json({ 
       success: false, 
       code: StatusCode.INVALID_TOKEN,
-      message: 'Invalid or expired token' 
+      message: StatusMessage[StatusCode.INVALID_TOKEN]
     });
   }
 });
