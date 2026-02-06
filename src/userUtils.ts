@@ -92,19 +92,22 @@ export function evaluateResumeCompleteness(profile: any, lang: 'zh' | 'en') {
   // 9. AI 指令: 5%
   if (profile.aiMessage) score += 5;
   
-  // Level 1: 基础要求 (姓名 + 联系方式 + 至少一段教育 + 至少一段工作)
-  const hasContact = lang === 'zh' 
-    ? (profile.wechat || profile.phone || profile.email)
-    : (profile.email || profile.phone_en || profile.whatsapp || profile.telegram || profile.linkedin || profile.website);
-    
-  const hasBasic = !!profile.name && 
-                   !!hasContact &&
-                   Array.isArray(profile.educations) && profile.educations.length > 0 &&
-                   Array.isArray(profile.workExperiences) && profile.workExperiences.length > 0;
+  // Level 1: 基础要求
+  const hasName = !!profile.name;
+  const hasEdu = Array.isArray(profile.educations) && profile.educations.length > 0;
+  let hasContact = false;
+
+  if (lang === 'zh') {
+    // 中文：姓名、(微信号 或 邮箱)、毕业院校
+    hasContact = !!(profile.wechat || profile.email);
+  } else {
+    // 英文：姓名、邮箱、毕业院校
+    hasContact = !!profile.email;
+  }
                    
   let level = 0;
-  if (hasBasic) {
-    level = (score >= 100) ? 2 : 1;
+  if (hasName && hasEdu && hasContact) {
+    level = 1;
   }
   
   return { score, level };
