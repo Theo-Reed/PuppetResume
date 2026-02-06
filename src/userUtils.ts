@@ -70,12 +70,21 @@ export function evaluateResumeCompleteness(profile: any, lang: 'zh' | 'en') {
   if (profile.gender) score += 5;
   if (profile.birthday) score += 5;
   
-  // 4. 联系方式: 15%
   if (lang === 'zh') {
-    if (profile.wechat || profile.phone || profile.email) score += 15;
+    const methods = ['wechat', 'phone', 'email'];
+    const presentCount = methods.filter(k => !!profile[k]).length;
+    if (presentCount > 0) {
+      const per = Math.ceil(15 / methods.length);
+      score += Math.min(per * presentCount, 15);
+    }
   } else {
-    // 英文版
-    if (profile.email || profile.phone_en || profile.phone || profile.whatsapp || profile.telegram || profile.linkedin || profile.website) score += 15;
+    // 英文版 数据库里的phone字段是不用的 只用phone_en
+    const methods = ['email', 'phone_en', 'whatsapp', 'telegram', 'linkedin', 'website'];
+    const presentCount = methods.filter(k => !!profile[k]).length;
+    if (presentCount > 0) {
+      const per = Math.ceil(15 / methods.length);
+      score += Math.min(per * presentCount, 15);
+    }
   }
   
   // 5. 教育经历: 20%
