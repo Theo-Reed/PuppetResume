@@ -35,7 +35,8 @@ router.post('/saveJob', async (req: Request, res: Response) => {
       success: true,
       result: {
         _id: jobId, // Return jobId as reference for simplicity
-        ok: 1
+        ok: 1,
+        upsertedId: result.upsertedId
       }
     });
   } catch (error: any) {

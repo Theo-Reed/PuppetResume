@@ -99,7 +99,7 @@ async function main() {
     ]);
     
     // Also clear users to test new auth system
-    await db.collection('users').deleteMany({});
+    // await db.collection('users').deleteMany({});
     
     // User Indexes for Login Wall
     console.log('Creating user indexes...');

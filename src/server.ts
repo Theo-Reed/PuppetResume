@@ -150,6 +150,15 @@ async function startServer() {
     await resumesColl.createIndex({ task_id: 1 });
     await resumesColl.createIndex({ jobId: 1 });
 
+    const savedJobsColl = db.collection('saved_jobs');
+    try {
+      // 迁移旧索引或确保新索引
+      await savedJobsColl.createIndex({ phoneNumber: 1, jobId: 1 }, { unique: true });
+      console.log('✅ saved_jobs index ensures');
+    } catch (e) {
+      console.warn('⚠️ saved_jobs index creation warning:', e);
+    }
+
     // 🚀 Step 3: 启动时清理僵死任务
     // 如果服务器异常重启，之前的 processing 任务将永远卡住，需统一重置
     await resumesColl.updateMany(

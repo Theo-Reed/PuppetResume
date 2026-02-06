@@ -7,7 +7,8 @@ const router = Router();
 router.post('/checkJobSaved', async (req: Request, res: Response) => {
   try {
     const { jobId } = req.body;
-    const phoneNumber = (req as any).user.phoneNumber;
+    const user = (req as any).user;
+    const phoneNumber = user?.phoneNumber;
 
     if (!phoneNumber || !jobId) {
         return res.json({ success: true, result: { exists: false } });
@@ -20,7 +21,7 @@ router.post('/checkJobSaved', async (req: Request, res: Response) => {
       success: true,
       result: {
         exists: !!saved,
-        _id: saved ? saved._id : null
+        _id: saved ? saved.jobId : null // Return jobId as reference for frontend
       }
     });
   } catch (error) {
