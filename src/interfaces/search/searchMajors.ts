@@ -12,7 +12,7 @@ router.post('/searchMajors', async (req: Request, res: Response) => {
     const { keyword, level } = req.body;
 
     if (!keyword || keyword.length < 1) {
-      return res.json({ success: true, result: { data: [] } });
+      return res.json({ success: true, result: { items: [] } });
     }
 
     const db = getDb();
@@ -69,7 +69,7 @@ router.post('/searchMajors', async (req: Request, res: Response) => {
     res.json({
       success: true,
       result: {
-        data: sorted.slice(0, 10)
+        items: sorted.slice(0, 10)
       }
     });
   } catch (error) {
