@@ -50,6 +50,67 @@ export async function ensureUser(openid: string, userInfo: any = {}) {
 }
 
 /**
+ * 计算简历完整度
+ * @param profile 某个语言版本的简历对象 (zh 或 en)
+ * @param lang 语言类型
+ */
+export function evaluateResumeCompleteness(profile: any, lang: 'zh' | 'en') {
+  if (!profile) return { score: 0, level: 0 };
+  
+  let score = 0;
+  
+  // 1. 姓名: 10%
+  if (profile.name) score += 10;
+  
+  // 2. 照片: 5%
+  if (profile.photo) score += 5;
+  
+  // 3. 性别/生日: 5% + 5%
+  if (profile.gender) score += 5;
+  if (profile.birthday) score += 5;
+  
+  // 4. 联系方式: 15%
+  if (lang === 'zh') {
+    if (profile.wechat || profile.phone || profile.email) score += 15;
+  } else {
+    // 英文版联系方式较多
+    if (profile.email || profile.phone_en || profile.whatsapp || profile.telegram || profile.linkedin || profile.website) score += 15;
+  }
+  
+  // 5. 教育经历: 20%
+  if (Array.isArray(profile.educations) && profile.educations.length > 0) score += 20;
+  
+  // 6. 工作经历: 20%
+  if (Array.isArray(profile.workExperiences) && profile.workExperiences.length > 0) score += 20;
+  
+  // 7. 技能: 10%
+  if (Array.isArray(profile.skills) && profile.skills.length > 0) score += 10;
+  
+  // 8. 证书: 5%
+  if (Array.isArray(profile.certificates) && profile.certificates.length > 0) score += 5;
+  
+  // 9. AI 指令: 5%
+  if (profile.aiMessage) score += 5;
+  
+  // Level 1: 基础要求 (姓名 + 联系方式 + 至少一段教育 + 至少一段工作)
+  const hasContact = lang === 'zh' 
+    ? (profile.wechat || profile.phone || profile.email)
+    : (profile.email || profile.phone_en || profile.whatsapp || profile.telegram || profile.linkedin || profile.website);
+    
+  const hasBasic = !!profile.name && 
+                   !!hasContact &&
+                   Array.isArray(profile.educations) && profile.educations.length > 0 &&
+                   Array.isArray(profile.workExperiences) && profile.workExperiences.length > 0;
+                   
+  let level = 0;
+  if (hasBasic) {
+    level = (score >= 100) ? 2 : 1;
+  }
+  
+  return { score, level };
+}
+
+/**
  * 获取物理上生效的 OpenID（处理账号合并重定向）
  */
 export async function getEffectiveOpenid(openid: string): Promise<string> {

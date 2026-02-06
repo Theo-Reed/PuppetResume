@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../../db';
-import { ensureUser } from '../../userUtils';
+import { ensureUser, evaluateResumeCompleteness } from '../../userUtils';
 
 const router = Router();
 
@@ -47,11 +47,33 @@ router.post('/updateUserProfile', async (req: Request, res: Response) => {
     if (!result) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
+
+    // 重新计算完整度并静默存入数据库
+    const profile = result.resume_profile || {};
+    const completenessUpdates: any = {};
+    
+    const zhRes = evaluateResumeCompleteness(profile.zh, 'zh');
+    completenessUpdates['resume_profile.zh.completeness'] = zhRes;
+    
+    const enRes = evaluateResumeCompleteness(profile.en, 'en');
+    completenessUpdates['resume_profile.en.completeness'] = enRes;
+
+    // 额外的兼容性顶层字段更新 (可选，为了兼容旧代码)
+    completenessUpdates['resume_percent'] = zhRes.score;
+    completenessUpdates['resume_completeness'] = zhRes.level;
+    completenessUpdates['resume_percent_en'] = enRes.score;
+    completenessUpdates['resume_completeness_en'] = enRes.level;
+
+    const finalResult = await usersCol.findOneAndUpdate(
+      { _id: result._id },
+      { $set: completenessUpdates },
+      { returnDocument: 'after' }
+    );
     
     res.json({
       success: true,
       result: {
-        user: result
+        user: finalResult || result
       }
     });
   } catch (error) {
