@@ -12,11 +12,9 @@ router.post('/getPublicJobList', async (req: Request, res: Response) => {
     // 构建查询条件
     const query: any = { is_deleted: { $ne: true } };
     
-    // 地区筛选 - 公开列表默认显示国内
+    // 地区筛选
     if (type && type !== '全部') {
       query.type = type;
-    } else {
-      query.type = '国内';
     }
 
     // 来源筛选

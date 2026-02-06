@@ -19,9 +19,6 @@ router.post('/getFeaturedJobList', async (req: Request, res: Response) => {
       } else {
         query.type = type;
       }
-    } else {
-      // 默认精选岗位包含国外和web3
-      query.type = { $in: ['国外', 'web3'] };
     }
 
     // 来源筛选
