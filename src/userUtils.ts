@@ -112,11 +112,11 @@ export function evaluateResumeCompleteness(profile: any, lang: 'zh' | 'en') {
   let hasContact = false;
 
   if (lang === 'zh') {
-    // 中文：姓名、(微信号 或 邮箱)、毕业院校
-    hasContact = !!(profile.wechat || profile.email);
+    // 中文：姓名、(手机、微信 或 邮箱 选一)、毕业院校
+    hasContact = !!(profile.phone || profile.wechat || profile.email);
   } else {
-    // 英文：姓名、邮箱、毕业院校
-    hasContact = !!profile.email;
+    // 英文：姓名、(邮箱 或 手机 选一)、毕业院校
+    hasContact = !!(profile.email || profile.phone_en || profile.phone);
   }
                    
   let level = 0;
