@@ -81,6 +81,7 @@ router.post('/createOrder', async (req: Request, res: Response) => {
 
     const order = {
         _id: new ObjectId(),
+        userId: user._id, // Store userId for robust cross-reference
         openid,
         scheme_id: scheme.scheme_id,
         scheme_name: (scheme.name_chinese || scheme.name),
