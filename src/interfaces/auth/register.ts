@@ -62,7 +62,7 @@ router.post('/register', async (req: Request, res: Response) => {
       createdAt: new Date(),
       updatedAt: new Date(),
       // Add default profile structure if needed
-      profile: {}, 
+      resume_profile: {}, 
       memberSchemes: []
     };
 
@@ -74,7 +74,7 @@ router.post('/register', async (req: Request, res: Response) => {
     res.json({
       success: true,
       code: StatusCode.SUCCESS,
-      data: {
+      result: {
         token,
         user: {
           _id: result.insertedId,
@@ -84,7 +84,8 @@ router.post('/register', async (req: Request, res: Response) => {
           nickname: '',
           avatar: '',
           membership: { level: 0 },
-          inviteCode: ''
+          inviteCode: '',
+          resume_profile: newUser.resume_profile
         }
       }
     });

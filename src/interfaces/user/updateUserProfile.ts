@@ -34,7 +34,12 @@ router.post('/updateUserProfile', async (req: Request, res: Response) => {
     }
 
     const result = await usersCol.findOneAndUpdate(
-      { openid },
+      { 
+        $or: [
+          { openids: openid },
+          { openid: openid }
+        ]
+      },
       { $set: updateFields },
       { returnDocument: 'after' }
     );
