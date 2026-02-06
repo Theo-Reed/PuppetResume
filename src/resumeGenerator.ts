@@ -82,28 +82,22 @@ export class ResumeGenerator {
               break;
               
           case 2: // Matches Job 3, 6, 9...
-              // Style: Skills 2 Cols, 3 Cats, 4 Items (If certs exist, 4 Cats)
+              // Style: Skills 3 Cols, 3 Cats, 4 Items (If certs exist, 3 Cats)
               strategy = {
                   targetPages: targetPages,
-                  skillColumns: 2,
+                  skillColumns: 3,
                   skillCategories: 3,
                   skillItemsPerCat: 4
               };
               if (hasCertificates) {
-                  strategy.skillCategories = 4;
+                  strategy.skillCategories = 3;
                   strategy.skillItemsPerCat = 3;
               }
               break;
               
           default:
               // Should not happen with % 3
-              strategy = {
-                  targetPages: targetPages,
-                  skillColumns: 2,
-                  skillCategories: 4,
-                  skillItemsPerCat: 4
-              };
-              break;
+              throw new Error('Invalid cycle index for layout strategy');
       }
       
       return strategy;
@@ -264,8 +258,9 @@ export class ResumeGenerator {
       const displayWebsite = contact.website.replace(/^https?:\/\//, '');
       // 确保链接有协议头
       const href = contact.website.startsWith('http') ? contact.website : `https://${contact.website}`;
-      // 🔗 符号不进行转义，网址内容进行转义，并使用 <a> 标签包裹
-      items.push(`🔗<a href="${this.escapeHtml(href)}" target="_blank" style="color: inherit; text-decoration: underline; text-underline-offset: 2px;">${this.escapeHtml(displayWebsite)}</a>`);
+      // 使用 SVG 链接图标代替 emoji，解决 Ubuntu 等 Linux 环境下 emoji 渲染问题
+      const linkIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: -1px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`;
+      items.push(`${linkIcon}<a href="${this.escapeHtml(href)}" target="_blank" style="color: inherit; text-decoration: underline; text-underline-offset: 2px;">${this.escapeHtml(displayWebsite)}</a>`);
     }
     
     // 使用 span 包裹每个项目，便于 CSS 控制换行和分隔符
@@ -275,9 +270,25 @@ export class ResumeGenerator {
   /**
    * 格式化教育经历
    */
-  private formatEducation(education: ResumeData['education']): string {
+  private formatEducation(education: ResumeData['education'], languages?: string): string {
+    const isEnglish = languages === 'english';
     return education
       .map((edu) => {
+        if (isEnglish) {
+          // 英文版：学校名和日期在一行，学位放在第二行，且不显示 description
+          let html = `
+            <div class="education-item">
+              <div class="education-header">
+                <span class="school-name">${this.escapeHtml(edu.school)}</span>
+                <span class="date">${this.escapeHtml(edu.graduationDate)}</span>
+              </div>
+              ${edu.degree ? `<div class="education-description" style="font-weight: 500; color: #444; margin-top: -5px;">${this.escapeHtml(edu.degree)}</div>` : ''}
+            </div>
+          `;
+          return html;
+        }
+
+        // 中文版保持原有逻辑
         let html = `
           <div class="education-item">
             <div class="education-header">
@@ -715,7 +726,7 @@ export class ResumeGenerator {
     html = html.replace('{{POSITION}}', this.escapeHtml(data.position));
     html = html.replace('{{CONTACT_INFO}}', this.formatContactInfo(data.contact, data.yearsOfExperience, data.languages));
     html = html.replace('{{YEARS_OF_EXPERIENCE}}', data.yearsOfExperience.toString());
-    html = html.replace('{{EDUCATION}}', this.formatEducation(data.education));
+    html = html.replace('{{EDUCATION}}', this.formatEducation(data.education, data.languages));
     html = html.replace('{{PERSONAL_INTRODUCTION}}', this.formatText(data.personalIntroduction));
     // 传入 strategy
     html = html.replace('{{PROFESSIONAL_SKILLS}}', this.formatProfessionalSkills(data.professionalSkills, options?.strategy));
