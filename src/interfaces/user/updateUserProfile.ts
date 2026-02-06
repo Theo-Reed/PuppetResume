@@ -44,12 +44,15 @@ router.post('/updateUserProfile', async (req: Request, res: Response) => {
       { returnDocument: 'after' }
     );
 
-    if (!result) {
+    // Robust handling of MongoDB findOneAndUpdate return types (Document vs ModifyResult)
+    const updatedUser: any = (result as any).value || result;
+
+    if (!updatedUser) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
     // 重新计算完整度并静默存入数据库
-    const profile = result.resume_profile || {};
+    const profile = updatedUser.resume_profile || {};
     const completenessUpdates: any = {};
     
     const zhRes = evaluateResumeCompleteness(profile.zh, 'zh');
@@ -64,16 +67,18 @@ router.post('/updateUserProfile', async (req: Request, res: Response) => {
     completenessUpdates['resume_percent_en'] = enRes.score;
     completenessUpdates['resume_completeness_en'] = enRes.level;
 
-    const finalResult = await usersCol.findOneAndUpdate(
-      { _id: result._id },
+    const finalResultUpdate = await usersCol.findOneAndUpdate(
+      { _id: updatedUser._id },
       { $set: completenessUpdates },
       { returnDocument: 'after' }
     );
     
+    const finalUser = (finalResultUpdate as any).value || finalResultUpdate || updatedUser;
+
     res.json({
       success: true,
       result: {
-        user: finalResult || result
+        user: finalUser
       }
     });
   } catch (error) {
