@@ -116,7 +116,7 @@ export function evaluateResumeCompleteness(profile: any, lang: 'zh' | 'en') {
     hasContact = !!(profile.phone || profile.wechat || profile.email);
   } else {
     // 英文：姓名、(邮箱 或 手机 选一)、毕业院校
-    hasContact = !!(profile.email || profile.phone_en || profile.phone);
+    hasContact = !!(profile.email || profile.phone_en);
   }
                    
   let level = 0;
