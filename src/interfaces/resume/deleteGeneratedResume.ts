@@ -8,12 +8,11 @@ const router = Router();
 
 router.post('/deleteGeneratedResume', async (req: Request, res: Response) => {
   try {
-    const { openid, resumeId } = req.body;
+    const { resumeId } = req.body;
     
-    const headers = req.headers;
-    const effectiveOpenId = (headers['x-openid'] as string) || openid;
-    if (!effectiveOpenId) {
-       return res.status(401).json({ success: false, message: 'Unauthorized' });
+    const phoneNumber = (req as any).user.phoneNumber;
+    if (!phoneNumber) {
+       return res.status(401).json({ success: false, message: 'Unauthorized: Missing phoneNumber' });
     }
     
     if (!resumeId) {
@@ -34,7 +33,7 @@ router.post('/deleteGeneratedResume', async (req: Request, res: Response) => {
     // 1. Find the resume verify ownership
     const resume = await collection.findOne({ 
         _id: queryId,
-        openid: effectiveOpenId
+        phoneNumber: phoneNumber
     });
 
     if (!resume) {

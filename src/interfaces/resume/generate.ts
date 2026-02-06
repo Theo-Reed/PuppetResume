@@ -15,10 +15,12 @@ const COLLECTION_RESUMES = 'generated_resumes';
 router.post('/generate', async (req: Request, res: Response) => {
   try {
     const payload = req.body as GenerateFromFrontendRequest;
-    const openid = req.headers['x-openid'] as string || payload.openid;
+    
+    // 使用 JWT 鉴权通过后的手机号
+    const phoneNumber = (req as any).user.phoneNumber;
 
-    if (!openid) {
-      return res.status(401).json({ success: false, message: 'Unauthorized: Missing OpenID' });
+    if (!phoneNumber) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: Missing phoneNumber' });
     }
 
     const db = getDb();
@@ -28,7 +30,7 @@ router.post('/generate', async (req: Request, res: Response) => {
 
     // --- Concurrent Task Check Start ---
     const existingTask = await db.collection(COLLECTION_RESUMES).findOne({
-      openid: openid,
+      phoneNumber: phoneNumber,
       jobId: payload.jobId,
       status: 'processing'
     });
@@ -49,7 +51,8 @@ router.post('/generate', async (req: Request, res: Response) => {
     // --- Concurrent Task Check End ---
 
     // --- Quota Check Start ---
-    const user = await ensureUser(openid);
+    const usersCol = db.collection('users');
+    const user = await usersCol.findOne({ phone: phoneNumber });
 
     if (!user) {
       return res.status(500).json({ error: '无法通过用户校验' });
@@ -66,15 +69,15 @@ router.post('/generate', async (req: Request, res: Response) => {
     if (isMemberActive && quota.used < quota.limit) {
       // Use Monthly Quota
       consumedType = 'monthly';
-      await db.collection('users').updateOne(
-        { openid: openid }, // Corrected to use openid variable
+      await usersCol.updateOne(
+        { _id: user._id },
         { $inc: { 'membership.pts_quota.used': 1 } }
       );
     } else if (topupBalance > 0) {
       // Use Top-up Quota
       consumedType = 'topup';
-      await db.collection('users').updateOne(
-        { openid: openid }, // Corrected to use openid variable
+      await usersCol.updateOne(
+        { _id: user._id },
         { $inc: { 'membership.topup_quota': -1 } }
       );
     } else {
@@ -94,7 +97,8 @@ router.post('/generate', async (req: Request, res: Response) => {
     // 2. 预先入库（立即执行）
     console.log(`📡 正在创建任务: ${taskId}`);
     await db.collection(COLLECTION_RESUMES).insertOne({
-      openid: openid,
+      phoneNumber: phoneNumber,
+      openid: user.openid, // Keep openid for reference
       task_id: taskId,
       status: 'processing',
       jobTitle: payload.job_data.title,

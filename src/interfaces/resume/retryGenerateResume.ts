@@ -8,13 +8,12 @@ const router = Router();
 
 router.post('/retryGenerateResume', async (req: Request, res: Response) => {
   try {
-    const { openid, resumeId } = req.body;
+    const { resumeId } = req.body;
     
     // 1. 验证用户权限
-    const headers = req.headers;
-    const effectiveOpenId = (headers['x-openid'] as string) || openid;
-    if (!effectiveOpenId) {
-       return res.status(401).json({ success: false, message: 'Unauthorized' });
+    const phoneNumber = (req as any).user.phoneNumber;
+    if (!phoneNumber) {
+       return res.status(401).json({ success: false, message: 'Unauthorized: Missing phoneNumber' });
     }
     
     if (!resumeId) {
@@ -35,7 +34,7 @@ router.post('/retryGenerateResume', async (req: Request, res: Response) => {
 
     const resume = await resumesCollection.findOne({ 
         _id: queryId,
-        openid: effectiveOpenId
+        phoneNumber: phoneNumber
     });
 
     if (!resume) {
@@ -74,7 +73,7 @@ router.post('/retryGenerateResume', async (req: Request, res: Response) => {
     }
 
     const payload: GenerateFromFrontendRequest = {
-        openid: effectiveOpenId,
+        openid: resume.openid,
         jobId: resume.jobId || jobData._id,
         resume_profile: resume.resumeInfo, 
         job_data: jobData,

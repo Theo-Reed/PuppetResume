@@ -5,19 +5,19 @@ const router = Router();
 
 router.post('/getGeneratedResumes', async (req: Request, res: Response) => {
   try {
-    const { openid, jobId, status, limit = 20, skip = 0 } = req.body;
+    const { jobId, status, limit = 20, skip = 0 } = req.body;
     
-    const headers = req.headers;
-    const effectiveOpenId = (headers['x-openid'] as string) || openid;
-    if (!effectiveOpenId) {
-       return res.status(401).json({ success: false, message: 'Unauthorized' });
+    // 使用 JWT 中的手机号
+    const phoneNumber = (req as any).user.phoneNumber;
+    if (!phoneNumber) {
+       return res.status(401).json({ success: false, message: 'Unauthorized: Missing phoneNumber' });
     }
 
     const db = getDb();
     const collection = db.collection('generated_resumes');
     
-    // Standardized to openid
-    const query: any = { openid: effectiveOpenId };
+    // 统一使用 phoneNumber 查询
+    const query: any = { phoneNumber };
 
     if (jobId) {
         query.jobId = jobId;

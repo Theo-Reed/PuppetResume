@@ -15,13 +15,12 @@ const router = Router();
  */
 router.post('/restoreResume', async (req: Request, res: Response) => {
   try {
-    const { openid, resumeId } = req.body;
+    const { resumeId } = req.body;
     
     // 1. 验证权限
-    const headers = req.headers;
-    const effectiveOpenId = (headers['x-openid'] as string) || openid;
-    if (!effectiveOpenId) {
-       return res.status(401).json({ success: false, message: 'Unauthorized' });
+    const phoneNumber = (req as any).user.phoneNumber;
+    if (!phoneNumber) {
+       return res.status(401).json({ success: false, message: 'Unauthorized: Missing phoneNumber' });
     }
     
     if (!resumeId) {
@@ -41,7 +40,7 @@ router.post('/restoreResume', async (req: Request, res: Response) => {
     // 2. 查找记录
     const resume = await resumesCollection.findOne({ 
         _id: queryId,
-        openid: effectiveOpenId
+        phoneNumber: phoneNumber
     });
 
     if (!resume) {
@@ -80,7 +79,7 @@ router.post('/restoreResume', async (req: Request, res: Response) => {
     }
 
     const finalTaskId = resume.task_id || resume.taskId || `RESTORE_${Date.now()}`;
-    console.log(`♻️  正在为 ${effectiveOpenId} 恢复简历 ${resumeId} (使用缓存数据，免AI)...`);
+    console.log(`♻️  正在为 ${phoneNumber} 恢复简历 ${resumeId} (使用缓存数据，免AI)...`);
 
     // 5. 将状态重置为 processing
     await resumesCollection.updateOne(
@@ -97,7 +96,7 @@ router.post('/restoreResume', async (req: Request, res: Response) => {
 
     // 6. 构造 Payload (包含 explicit 的 enhancedData 触发 taskRunner 的跳过逻辑)
     const payload = {
-        openid: effectiveOpenId,
+        openid: resume.openid,
         jobId: resume.jobId,
         resume_profile: resume.resumeInfo,
         job_data: resume.jobData,
