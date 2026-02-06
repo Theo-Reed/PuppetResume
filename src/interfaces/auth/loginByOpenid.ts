@@ -49,6 +49,7 @@ router.post('/loginByOpenid', async (req: Request, res: Response) => {
         token,
         user: {
           _id: user._id,
+          openid: user.openid || (user.openids && user.openids[0]),
           phone: user.phone || user.phoneNumber,
           phoneNumber: user.phone || user.phoneNumber,
           openids: user.openids || [user.openid],

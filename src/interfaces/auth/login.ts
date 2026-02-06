@@ -85,6 +85,7 @@ router.post('/loginByPhone', async (req: Request, res: Response) => {
         token,
         user: {
           _id: user._id,
+          openid: openid || (updatedOpenids && updatedOpenids[0]),
           phoneNumber: user.phoneNumber,
           phone: user.phoneNumber,
           openids: updatedOpenids,
