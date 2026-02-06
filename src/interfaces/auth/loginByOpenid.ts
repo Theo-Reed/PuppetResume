@@ -58,7 +58,7 @@ router.post('/loginByOpenid', async (req: Request, res: Response) => {
           avatar: user.avatar || '',
           membership: user.membership || { level: 0 },
           inviteCode: user.inviteCode || '',
-          profile: user.profile,
+          resume_profile: user.resume_profile || {},
           isAuthed: !!(user.phone || user.phoneNumber)
         }
       }

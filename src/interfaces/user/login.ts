@@ -49,7 +49,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      data: { 
+      result: { 
         openid
       }
     });
