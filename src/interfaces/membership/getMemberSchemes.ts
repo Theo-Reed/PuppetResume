@@ -15,9 +15,13 @@ router.post('/getMemberSchemes', async (req: Request, res: Response) => {
     ];
 
     let memberLevel = 0;
+    let userScheme = null;
     if (openid) {
       const user = await UserRepository.findByOpenidOrId(openid);
       memberLevel = user?.membership?.level || 0;
+      if (memberLevel > 1) {
+          userScheme = await SchemeRepository.findByLevel(memberLevel);
+      }
     }
 
     // 2. Business Rules Filtering
@@ -77,27 +81,13 @@ router.post('/getMemberSchemes', async (req: Request, res: Response) => {
         } else if (memberLevel === 4) {
             feats = (sid === 5) ? F.topupGeneral : F.renewal;
         }
-        s.features = feats;
-    });
-
-    res.json({ success: true, result: schemes });
-  } catch (error: any) {
-    console.error('[GetSchemes] Error:', error);
-    res.status(500).json({ success: false, message: 'Internal Server Error' });
-  }
-}); 
-        }
-        // Scenario 4: Premium (4)
-        else if (memberLevel === 4) {
-             if (sid === 2 || sid === 3 || sid === 4) feats = F.renewal;
-             else if (sid === 5) feats = F.topupEmergency;
-        }
-
+        
+        // Map to fields expected by the UI
         s.features_chinese = feats.map(f => f.cn);
         s.features_english = feats.map(f => f.en);
         s.features_is_dash = feats.map(f => !!f.isDash);
 
-        // Final safety check: ensure 3 items
+        // Ensure exactly 3 items for UI consistency
         while (s.features_chinese.length < 3) {
             s.features_chinese.push(filler.cn);
             s.features_english.push(filler.en);
@@ -109,39 +99,35 @@ router.post('/getMemberSchemes', async (req: Request, res: Response) => {
     const getSortOrder = (level: number) => {
        // IDs: 2=Sprint, 3=Standard, 4=Premium, 5=Topup
        switch (level) {
-          case 0: // Non-member
-              return [3, 4, 2]; // Standard, Premium, Sprint
-          case 1: // Trial
-              return [3, 4, 2, 5]; // Standard, Premium, Sprint, Topup
-          case 3: // Standard
-              return [4, 5, 3, 2]; // Premium, Topup, Standard, Sprint
-          case 4: // Premium
-              return [5, 4, 3, 2]; // Topup, Premium, Standard, Sprint
+          case 0:
+          case 1:
+              return [3, 4, 2];
+          case 3:
+              return [4, 5, 3, 2];
+          case 4:
+              return [5, 4, 3, 2];
           default: 
               return [3, 4, 5, 2];
        }
     };
 
     const preferredOrder = getSortOrder(memberLevel);
-    
     schemes.sort((a, b) => {
         const idxA = preferredOrder.indexOf(a.scheme_id);
         const idxB = preferredOrder.indexOf(b.scheme_id);
-        const valA = idxA === -1 ? 999 : idxA;
-        const valB = idxB === -1 ? 999 : idxB;
-        return valA - valB;
+        return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
     });
 
     res.json({
       success: true,
       result: {
         schemes: schemes,
-        userScheme: userScheme // Return current scheme details
+        userScheme: userScheme
       }
     });
   } catch (error) {
-    console.error('getMemberSchemes error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
+    console.error('[GetSchemes] Error:', error);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 });
 

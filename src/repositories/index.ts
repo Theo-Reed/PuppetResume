@@ -80,6 +80,15 @@ export class OrderRepository {
             { $set: { status: 'failed', failureReason: reason } }
         );
     }
+
+    static async findPendingOrder(query: any): Promise<IOrder | null> {
+        return await this.col.findOne({ ...query, status: 'pending' }) as unknown as IOrder;
+    }
+
+    static async create(order: IOrder): Promise<string> {
+        await this.col.insertOne(order);
+        return order._id.toString();
+    }
 }
 
 export class UserRepository {
@@ -108,14 +117,5 @@ export class SchemeRepository {
 
     static async listPublicSchemes(): Promise<IScheme[]> {
         return await this.col.find({ type: { $ne: 'gift' } }).toArray() as unknown as IScheme[];
-    }
-
-    static async findPendingOrder(query: any): Promise<IOrder | null> {
-        return await this.col.findOne({ ...query, status: 'pending' }) as unknown as IOrder;
-    }
-
-    static async create(order: IOrder): Promise<string> {
-        await this.col.insertOne(order);
-        return order._id.toString();
     }
 }
