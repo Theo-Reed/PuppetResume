@@ -1174,7 +1174,7 @@ export class ResumeGenerator {
 
       // --- SECOND ROUND: Aggressive Filling (Relaxed Constraints) ---
       // 尝试通过放宽排版约束（如允许标题更靠近底部），进一步利用页面空间（针对 90%+ 填充率的情况）
-      let finalDangerZone = 50; // Default Strict (50px)
+      let finalDangerZone = 0; // 改为 0 (Relaxed)，让布局默认尽可能写满
       {
           const RELAXED_DANGER_ZONE = 0; // 从 50px 放宽到 0px
           console.log(`[Solver] Round 2: Attempting Aggressive Fill (DangerZone: ${RELAXED_DANGER_ZONE}px)...`);
