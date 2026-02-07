@@ -334,14 +334,14 @@ export class ResumeAIService {
     The JSON structure must be:
     {
       "title": "Job Title (e.g. Senior Frontend Engineer)",
-      "years": 3, // Minimum years of experience required (number). If range "3-5", use 3. If "No experience" or not mentioned, use 0.
+      "years": 3, // Minimum years of experience required (number). If range "3-5", use 3. If "No experience" or not mentioned, return null (do NOT use 0 unless clearly stated as 'No experience required').
       "description": "Full job description text..."
     }
     
     Rules:
     1. "title": Extract the main job title. If not found, leave empty string.
-    2. "years": Extract only the minimum required years as a number.
-    3. "description": Extract the full responsibility and requirement text.
+    2. "years": Extract only the minimum required years as a number. If not found or ambiguous, use null. do NOT default to 3.
+    3. "description": Extract the full responsibility and requirement text. If unable to extract text or image is unclear, return empty string.
     4. Only return the JSON. No markdown.
     `;
 
@@ -360,8 +360,9 @@ export class ResumeAIService {
         let data = this.parseJSON(result);
         
         // Normalize
-        if (typeof data.years !== 'number') {
-            data.years = parseInt(data.years) || 0;
+        if (data.years !== null && typeof data.years !== 'number') {
+            const parsed = parseInt(data.years);
+            data.years = isNaN(parsed) ? null : parsed;
         }
         
         return data;
