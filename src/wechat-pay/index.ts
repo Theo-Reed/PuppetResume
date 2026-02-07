@@ -65,7 +65,7 @@ export const getMiniProgramPaymentParams = async (
   const params: IRequestParams = {
     description,
     out_trade_no,
-    notify_url: process.env.WX_NOTIFY_URL || 'http://127.0.0.1:3000/api/payCallback',
+    notify_url: process.env.WX_NOTIFY_URL || 'https://www.feiwan.online/api/payCallback',
     amount,
     payer: {
       openid,
