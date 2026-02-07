@@ -52,7 +52,7 @@ export const activateMembershipByOrder = async (orderId: string) => {
     const durationMs = durationDays * 24 * 60 * 60 * 1000;
     const pointsToAdd = scheme.points || 0;
 
-    let newExpireAt: Date;
+    let newExpireAt: Date | null;
 
     // Handle Expiration Logic
     if (scheme.type === 'topup') {
