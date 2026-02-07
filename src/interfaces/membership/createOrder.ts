@@ -3,7 +3,7 @@ import { getDb } from '../../db';
 import { ensureUser, isTestUser } from '../../userUtils';
 import { ObjectId } from 'mongodb';
 
-import { hasWxConfig, getMiniProgramPaymentParams } from '../../wechat-pay';
+import { hasWxConfig, getMiniProgramPaymentParams, queryOrder } from '../../wechat-pay';
 
 import { activateMembershipByOrder } from '../../services/membershipService';
 
@@ -74,6 +74,23 @@ router.post('/createOrder', async (req: Request, res: Response) => {
     });
 
     if (existingOrder && (existingOrder as any).paymentParams) {
+        // --- NEW: Verify real status of existing order before reuse ---
+        if (hasWxConfig()) {
+            const wxResult = await queryOrder(existingOrder._id.toString());
+            
+            if (wxResult && wxResult.trade_state === 'SUCCESS') {
+                console.log(`[Payment] Existing order ${existingOrder._id} was already paid. Activating...`);
+                await activateMembershipByOrder(existingOrder._id.toString());
+                return res.json({
+                    success: true,
+                    result: {
+                        alreadyPaid: true,
+                        message: 'Payment verified. Membership activated.'
+                    }
+                });
+            }
+        }
+
         console.log('[Payment] Reusing existing order:', existingOrder._id);
         return res.json({
             success: true,
