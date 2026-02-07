@@ -163,18 +163,36 @@ export const decipherNotification = (resource: any) => {
 export const queryOrder = async (out_trade_no: string) => {
     const client = getWxPayClient();
     try {
-        const result = await client.transactions_out_trade_no(out_trade_no, {
-            mchid: process.env.WX_MCHID || ''
-        });
+        // wechatpay-node-v3 uses transactions_out_trade_no but it's nested or depends on version.
+        // The most reliable way for this specific library to query is often using the direct method
+        // based on the URL pattern if the semantic methods fail.
+        let result: any;
         
-        if (result.status === 200 && result.data && result.data.trade_state) {
+        try {
+            // Priority 1: Semantic method
+            result = await client.transactions_out_trade_no(out_trade_no);
+        } catch (e) {
+            // Priority 2: Generic query method (if exists in this version)
+            if (typeof client.query === 'function') {
+                result = await client.query({ out_trade_no });
+            } else {
+                throw e;
+            }
+        }
+        
+        if (result && result.status === 200 && result.data && result.data.trade_state) {
             return result.data; 
         } else {
-            console.warn(`[WxPay] Query order ${out_trade_no} status: ${result.status}`, result.data);
-            return { error: true, status: result.status, data: result.data };
+            console.warn(`[WxPay] Query order ${out_trade_no} result status: ${result?.status}`, result?.data);
+            return { error: true, status: result?.status, data: result?.data };
         }
     } catch (error: any) {
         console.error('[WxPay] Query Order Exception:', out_trade_no, error.message);
+        
+        // Debug: Log all available methods on client to see what's actually there
+        const methods = Object.keys(client).filter(k => typeof (client as any)[k] === 'function');
+        console.log('[WxPay] Available client methods:', methods);
+        
         return { error: true, message: error.message };
     }
 }
