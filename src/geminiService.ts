@@ -65,9 +65,9 @@ export class GeminiService {
    */
   async generateContentWithParts(parts: Part[]): Promise<string> {
     const models = [
-      "gemini-3-flash-preivew",
-      "gemini-3-pro-preview",
       "gemini-2.5-pro", 
+      "gemini-3-pro-preview",
+      "gemini-3-flash-preivew",
     ];
 
     for (const modelName of models) {
