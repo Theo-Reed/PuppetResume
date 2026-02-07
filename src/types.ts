@@ -193,7 +193,7 @@ export function mapFrontendRequestToResumeData(payload: GenerateFromFrontendRequ
     contact: {
       email: profile.email,
       wechat: profile.wechat,
-      phone: profile.phone,
+      phone: isEnglish ? profile.phone_en : profile.phone,
       website: profile.website,
       linkedin: profile.linkedin,
       telegram: profile.telegram,
