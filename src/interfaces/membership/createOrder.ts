@@ -5,6 +5,8 @@ import { ObjectId } from 'mongodb';
 
 import { hasWxConfig, getMiniProgramPaymentParams } from '../../wechat-pay';
 
+import { activateMembershipByOrder } from '../../services/membershipService';
+
 const router = Router();
 
 // Used in: pages/me/index.ts
@@ -116,6 +118,25 @@ router.post('/createOrder', async (req: Request, res: Response) => {
             console.log('[Payment] Params generated successfully');
         } catch (err: any) {
             console.error('WeChat Pay Generation Error:', err);
+
+            // Handle "Order Already Paid" case (ORDERPAID)
+            const errorData = err.data || (err.response && err.response.data) || {};
+            const errorCode = errorData.code || "";
+            
+            if (errorCode === 'ORDERPAID' || err.message?.includes('ORDERPAID')) {
+                console.log(`[Payment] Order ${order._id} already paid. Force activating for user ${openid}`);
+                try {
+                    await activateMembershipByOrder(order._id.toString());
+                    return res.json({
+                        success: true, 
+                        isAlreadyPaid: true,
+                        message: 'Membership activated via existing payment.'
+                    });
+                } catch (activateErr) {
+                    return res.status(500).json({ success: false, message: 'Payment exists but activation failed' });
+                }
+            }
+
             return res.status(500).json({ success: false, message: 'Payment init failed: ' + err.message });
         }
     } else {

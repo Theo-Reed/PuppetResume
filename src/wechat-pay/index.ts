@@ -163,21 +163,23 @@ export const decipherNotification = (resource: any) => {
 export const queryOrder = async (out_trade_no: string) => {
     const client = getWxPayClient();
     try {
-        // wechatpay-node-v3 uses transactions_out_trade_no but it's nested or depends on version.
-        // The most reliable way for this specific library to query is often using the direct method
-        // based on the URL pattern if the semantic methods fail.
+        const mchid = process.env.WX_MCHID || '';
         let result: any;
         
-        try {
-            // Priority 1: Semantic method
-            result = await client.transactions_out_trade_no(out_trade_no);
-        } catch (e) {
-            // Priority 2: Generic query method (if exists in this version)
-            if (typeof client.query === 'function') {
-                result = await client.query({ out_trade_no });
-            } else {
-                throw e;
-            }
+        // Comprehensive detection for wechatpay-node-v3 methods
+        // Versions vary greatly in where they mount the transactions methods
+        if (typeof client.transactions_out_trade_no === 'function') {
+            result = await client.transactions_out_trade_no(out_trade_no, { mchid });
+        } else if (client.v3 && client.v3.pay && client.v3.pay.transactions && typeof client.v3.pay.transactions.out_trade_no === 'function') {
+            result = await client.v3.pay.transactions.out_trade_no(out_trade_no, { mchid });
+        } else if (typeof client.query === 'function') {
+            result = await client.query({ out_trade_no });
+        } else {
+            // Raw GET request fallback using the underlying request mechanism if available
+            console.log('[WxPay] Standard methods not found, trying underlying request...');
+             result = await client.get(`/v3/pay/transactions/out-trade-no/${out_trade_no}`, {
+                params: { mchid }
+            });
         }
         
         if (result && result.status === 200 && result.data && result.data.trade_state) {
@@ -189,7 +191,7 @@ export const queryOrder = async (out_trade_no: string) => {
     } catch (error: any) {
         console.error('[WxPay] Query Order Exception:', out_trade_no, error.message);
         
-        // Debug: Log all available methods on client to see what's actually there
+        // Debug: Log all available methods on client to help identify the correct one
         const methods = Object.keys(client).filter(k => typeof (client as any)[k] === 'function');
         console.log('[WxPay] Available client methods:', methods);
         
