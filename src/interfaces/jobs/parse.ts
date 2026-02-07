@@ -31,6 +31,12 @@ router.post('/parse-job-screenshot', upload.single('file'), async (req: Request,
              return res.status(400).json({ success: false, message: '请上传图片' });
         }
 
+        // --- Size Validation (Backup) ---
+        if (file.size < 100) {
+            return res.status(400).json({ success: false, message: '图片文件过小' });
+        }
+        // MAX_SIZE is handled by multer limits
+
         // --- Quota Check Start (Deduct before Processing) ---
         const db = getDb();
         const usersCol = db.collection('users');
