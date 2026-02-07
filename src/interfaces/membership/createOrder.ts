@@ -98,12 +98,14 @@ router.post('/createOrder', async (req: Request, res: Response) => {
     
     if (hasWxConfig()) {
         try {
+            console.log(`[Payment] Creating Wechat Order for openid: ${openid}, amount: ${payAmount}`);
             paymentParams = await getMiniProgramPaymentParams(
                 `Membership-${(scheme.name_chinese || scheme.name)}`,
                 order._id.toString(),
                 { total: payAmount, currency: 'CNY' },
                 openid
             );
+            console.log('[Payment] Params generated successfully');
         } catch (err: any) {
             console.error('WeChat Pay Generation Error:', err);
             return res.status(500).json({ success: false, message: 'Payment init failed: ' + err.message });
