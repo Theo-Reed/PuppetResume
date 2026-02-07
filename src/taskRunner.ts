@@ -96,7 +96,12 @@ async function executeTask(taskId: string, payload: GenerateFromFrontendRequest,
     await generator.init();
     
     const timestamp = Date.now();
-    const fileName = `${payload.openid}_${timestamp}_${taskId}.pdf`;
+    // 构造描述性的文件名: 姓名_职位_时间戳.pdf
+    const safeName = (enhancedData.name || 'Resume').replace(/[/\\?%*:|"<>]/g, '-');
+    const safePosition = (enhancedData.position || '').replace(/[/\\?%*:|"<>]/g, '-');
+    const baseName = safePosition ? `${safeName}_${safePosition}` : safeName;
+    
+    const fileName = `${baseName}_${timestamp}_${taskId}.pdf`;
     const filePath = join(RESUMES_DIR, fileName);
     const fileUrl = `/public/resumes/${fileName}`;
 
@@ -107,6 +112,9 @@ async function executeTask(taskId: string, payload: GenerateFromFrontendRequest,
     await db.collection(COLLECTION_RESUMES).updateOne({ task_id: taskId }, {
       $set: {
         status: 'completed',
+        jobTitle: enhancedData.position || 'Resume', 
+        jobTitle_cn: enhancedData.position || 'Resume', // 同步设置中英文标题，确保前端多语言对齐
+        jobTitle_en: enhancedData.position || 'Resume',
         fileUrl: fileUrl, 
         enhancedData: enhancedData, // 保存 AI 生成的结果
         completeTime: new Date()

@@ -169,7 +169,10 @@ router.post('/refine-resume', upload.single('file'), async (req: Request, res: R
         await db.collection('generated_resumes').insertOne({
            task_id: taskId,
            jobId: job_data._id,
-           jobName: job_data.title,
+           jobTitle: job_data.title,
+           jobTitle_cn: job_data.title_chinese,
+           jobTitle_en: job_data.title_english,
+           company: job_data.team,
            openid: userAuth.phoneNumber,
            phoneNumber: userAuth.phoneNumber,
            status: 'processing',
