@@ -7,6 +7,7 @@ export enum StatusCode {
   // Client errors (40000+)
   BAD_REQUEST = 40000,
   INVALID_PARAMS = 40001,
+  INVALID_DOCUMENT_CONTENT = 40002, // Generated when parsed content is empty or invalid
   
   // Auth errors (40100+)
   UNAUTHORIZED = 40101, // Missing token
@@ -28,6 +29,7 @@ export enum StatusCode {
 
 export const StatusMessage: Record<number, string> = {
   [StatusCode.HTTP_FORBIDDEN]: '无权访问 (403)',
+  [StatusCode.INVALID_DOCUMENT_CONTENT]: '未识别到有效文字，请上传清晰的简历图片或PDF',
   [StatusCode.HTTP_CONFLICT]: '资源冲突 (409)',
   [StatusCode.BAD_REQUEST]: '请求参数错误',
   [StatusCode.INVALID_PARAMS]: '参数校验失败',

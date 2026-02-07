@@ -161,7 +161,16 @@ router.post('/refine-resume', upload.single('file'), async (req: Request, res: R
 
     } catch (e: any) {
         console.error("Refine Resume Failed", e);
-        res.status(500).json({ success: false, message: e.message });
+        
+        let statusCode = 500;
+        let message = e.message;
+
+        if (message && message.includes("无效内容")) {
+            statusCode = StatusCode.INVALID_DOCUMENT_CONTENT;
+            message = StatusMessage[StatusCode.INVALID_DOCUMENT_CONTENT];
+        }
+
+        res.status(statusCode).json({ success: false, message, code: statusCode });
     }
 });
 

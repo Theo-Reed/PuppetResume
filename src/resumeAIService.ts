@@ -282,22 +282,42 @@ export class ResumeAIService {
         return this.parseJSON(result);
     } catch (e: any) {
         console.error("Gemini Extraction Failed", e);
+        // 如果自定义错误，直接抛出，否则抛出通用错误
+        if (e.message.includes("无效内容")) {
+             throw e;
+        }
         throw new Error("AI 解析简历失败: " + e.message);
     }
   }
 
   private parseJSON(text: string): any {
+      let data: any = {};
       try {
           // Remove Markdown Code Blocks if present
           const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
           const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
-              return JSON.parse(jsonMatch[0]);
+              data = JSON.parse(jsonMatch[0]);
+          } else {
+              data = JSON.parse(cleanText);
           }
-          return JSON.parse(cleanText);
       } catch (e) {
           console.error("Failed to parse AI JSON response", text);
           throw new Error("简历解析失败，AI返回格式错误");
       }
+
+      // 验证提取内容的有效性
+      // 至少需要有基本的个人信息或经历信息
+      const hasBasicInfo = (data.name && data.name.length > 0) || (data.mobile && data.mobile.length > 0) || (data.email && data.email.length > 0);
+      const hasExperience = data.experience && Array.isArray(data.experience) && data.experience.length > 0;
+      const hasEducation = data.education && Array.isArray(data.education) && data.education.length > 0;
+      const hasSkills = data.skills && Array.isArray(data.skills) && data.skills.length > 0;
+      
+      // 如果几乎全是空的，认为未识别到有效内容
+      if (!hasBasicInfo && !hasExperience && !hasEducation && !hasSkills) {
+          throw new Error("无效内容: 未能从文件中提取到有效的简历信息");
+      }
+      
+      return data;
   }
 }
