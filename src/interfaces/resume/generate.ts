@@ -66,7 +66,7 @@ router.post('/generate', async (req: Request, res: Response) => {
     const isMemberActive = membership.expire_at && new Date(membership.expire_at) > now;
 
     let consumedType = '';
-    const isPaid = payload.job_data?._is_paid === true;
+    const isPaid = payload.is_paid === true;
 
     if (isPaid) {
       console.log(`[Generate] Quota skipped for paid task (Screenshot Parse).`);
