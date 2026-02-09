@@ -2,6 +2,7 @@ import { GeminiService } from "./geminiService";
 import { GenerateFromFrontendRequest, ResumeData, mapFrontendRequestToResumeData } from "./types";
 import { generateChinesePrompt } from "./prompts/ChinesePrompt";
 import { generateEnglishPrompt } from "./prompts/EnglishPrompt";
+import { generateExtractionPrompt } from "./prompts/ExtractionPrompt";
 import { ExperienceCalculator } from "./utils/experienceCalculator";
 import pdf from 'pdf-parse';
 
@@ -241,45 +242,7 @@ export class ResumeAIService {
         throw new Error("不支持的文件类型: " + mimeType);
     }
 
-    const prompt = `
-    You are an expert Resume Parser. 
-    Analyze the provided resume document (text or image) and extract the candidate's profile information into a strictly valid JSON object.
-    
-    The JSON structure must be:
-    {
-      "language": "chinese" or "english" (detect based on content),
-      "name": "Candidate Name",
-      "gender": "Male/Female/Other (only if explicitly stated, otherwise leave empty)",
-      "mobile": "Phone Number",
-      "email": "Email Address",
-      "wechat": "Wechat ID",
-      "city": "Current City",
-      "education": [
-        { "school": "School Name", "degree": "Degree", "major": "Major", "startTime": "YYYY-MM", "endTime": "YYYY-MM" }
-      ],
-      "experience": [
-        { 
-          "company": "Company/Project/Organization Name", 
-          "role": "Job Title/Role", 
-          "startTime": "YYYY-MM", 
-          "endTime": "YYYY-MM", 
-          "description": "Summary of responsibilities and achievements" 
-        }
-      ],
-      "skills": ["Skill 1", "Skill 2"]
-    }
-    
-    If specific fields are missing, leave them as empty strings or empty arrays. 
-    Dates should be normalized to YYYY-MM format. 'Present' should be the current date (2026-02).
-    
-    CRITICAL RULES:
-    1. Include ALL professional experience in the "experience" array, including full-time jobs, internships, freelance work, research projects, and significant open-source contributions. 
-    2. For project-only entries, use the project name as "company" and your role as "role".
-    3. For 'major' (专业名称) in 'education', you MUST use the exact name found in the original document. Do NOT attempt to translate, standardize, or optimize it (e.g., keep "CS" as "CS", don't change to "Computer Science") unless it is clearly an error or garbage data.
-    
-    Only return the JSON. No markdown formatting.
-    ${text ? `\nResume Content:\n${text}` : ""}
-    `;
+    const prompt = generateExtractionPrompt(text || "");
 
     try {
         let result = "";
@@ -328,42 +291,68 @@ export class ResumeAIService {
   private parseResumeJSON(text: string): any {
       const data = this.extractJSON(text);
 
-      // 1. Merge projects into experience if they exist
-      if (data.projects && Array.isArray(data.projects) && data.projects.length > 0) {
-          if (!data.experience) data.experience = [];
+      // Handle Bilingual Format
+      if (data.zh && data.en) {
+          // Normalize both versions
+          this.normalizeParsedProfile(data.zh);
+          this.normalizeParsedProfile(data.en);
+
+          // Validation based on detected language or zh
+          const detectLang = data.language === 'english' ? 'en' : 'zh';
+          const target = data[detectLang] || data.zh;
           
-          data.projects.forEach((proj: any) => {
-              // Ensure we don't duplicate if the AI already put it in experience (rare but possible)
-              const isDuplicate = data.experience.some((exp: any) => 
+          this.validateProfile(target);
+
+          // Flatten detected language fields to top level for compatibility with existing code (e.g. parse.ts)
+          return {
+              ...target,
+              language: data.language,
+              zh: data.zh,
+              en: data.en
+          };
+      }
+
+      // Fallback for old single-language format (if any)
+      this.normalizeParsedProfile(data);
+      this.validateProfile(data);
+      return data;
+  }
+
+  private normalizeParsedProfile(profile: any) {
+      if (!profile) return;
+
+      // 1. Merge projects into experience if they exist (defensive)
+      if (profile.projects && Array.isArray(profile.projects) && profile.projects.length > 0) {
+          if (!profile.experience) profile.experience = [];
+          
+          profile.projects.forEach((proj: any) => {
+              const isDuplicate = profile.experience.some((exp: any) => 
                   (exp.company === proj.name || exp.description === proj.description)
               );
               
               if (!isDuplicate) {
-                  data.experience.push({
-                      company: proj.name || '项目经验',
-                      role: proj.role || '项目成员',
+                  profile.experience.push({
+                      company: proj.name || (profile.language === 'en' ? 'Project' : '项目经验'),
+                      role: proj.role || (profile.language === 'en' ? 'Contributor' : '项目成员'),
                       startTime: proj.startTime,
                       endTime: proj.endTime,
                       description: proj.description
                   });
               }
           });
-          // Empty projects after merging to avoid double usage in frontend if it expects the same fields
-          data.projects = [];
+          profile.projects = [];
       }
+  }
 
-      // 2. 验证提取内容的有效性 (Resume Specific)
+  private validateProfile(data: any) {
       const hasBasicInfo = (data.name && data.name.length > 0) || (data.mobile && data.mobile.length > 0) || (data.email && data.email.length > 0);
       const hasExperience = data.experience && Array.isArray(data.experience) && data.experience.length > 0;
       const hasEducation = data.education && Array.isArray(data.education) && data.education.length > 0;
       const hasSkills = data.skills && Array.isArray(data.skills) && data.skills.length > 0;
       
-      // 如果几乎全是空的，认为未识别到有效内容
       if (!hasBasicInfo && !hasExperience && !hasEducation && !hasSkills) {
           throw new Error("无效内容: 未能从文件中提取到有效的简历信息");
       }
-      
-      return data;
   }
 
   /**
