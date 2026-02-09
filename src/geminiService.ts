@@ -65,8 +65,8 @@ export class GeminiService {
    */
   async generateContentWithParts(parts: Part[]): Promise<string> {
     const models = [
-      "gemini-2.5-pro", 
       "gemini-3-pro-preview",
+      "gemini-2.5-pro", 
       "gemini-3-flash-preivew",
     ];
 
@@ -97,9 +97,9 @@ export class GeminiService {
    */
   async generateContent(prompt: string, validator?: (text: string) => boolean | Promise<boolean>): Promise<string> {
     const models = [
-      "gemini-3-flash-preview",
       "gemini-3-pro-preview",
       "gemini-2.5-pro",
+      "gemini-3-flash-preview",
     ];
 
     const attempts = 3;
@@ -164,9 +164,9 @@ export class GeminiService {
    */
   async analyzeImage(prompt: string, imageBuffer: Buffer, mimeType: string): Promise<string> {
     const models = [
-      "gemini-3-flash-preview",
       "gemini-3-pro-preview",
       "gemini-2.5-pro",
+      "gemini-3-flash-preview",
     ];
 
     for (const modelName of models) {
