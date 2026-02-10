@@ -303,8 +303,11 @@ export class ResumeAIService {
           
           this.validateProfile(target);
 
-          // Flatten detected language fields to top level for compatibility with existing code (e.g. parse.ts)
+          // Return all blocks but flatten the detected language to top level for backward compatibility
           return {
+              mobile: data.mobile || "",
+              email: data.email || "",
+              website: data.website || "",
               ...target,
               language: data.language,
               zh: data.zh,
@@ -315,7 +318,11 @@ export class ResumeAIService {
       // Fallback for old single-language format (if any)
       this.normalizeParsedProfile(data);
       this.validateProfile(data);
-      return data;
+      return {
+          ...data,
+          zh: data.zh || data, // Ensure nesting exists for frontend
+          en: data.en || data
+      };
   }
 
   private normalizeParsedProfile(profile: any) {
