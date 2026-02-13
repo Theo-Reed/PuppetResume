@@ -43,12 +43,40 @@ router.post('/parse', upload.single('file'), async (req: Request, res: Response)
              return res.status(404).json({ success: false, message: 'User not found' });
         }
 
-        // --- Quota Check (Parsing costs 1 point) ---
         const membership = (user as any).membership || {};
+        const level = membership.level || 0;
+        const lastGenerated = (user as any).resume_profile?.last_generated ? new Date((user as any).resume_profile.last_generated).getTime() : 0;
+        const now = Date.now();
+        const completeness = (user as any).resume_profile?.completeness?.score || 0;
+        const zhCompleteness = (user as any).resume_profile?.zh?.completeness?.score || 0;
+        const enCompleteness = (user as any).resume_profile?.en?.completeness?.score || 0;
+        const maxCompleteness = Math.max(completeness, zhCompleteness, enCompleteness);
+
+        // --- Cooldown Check (Based on User Level & Completeness) ---
+        // Rule: If completeness < 45, ignore cooldown (allow unlimited updates to fix bad profiles)
+        // Rule: If Level < 1, 6 hours cooldown. If Level >= 1, 1 hour cooldown.
+        // Rule: Updating profile does NOT consume quota.
+        
+        let cooldownMs = 6 * 3600 * 1000; // Default 6 hours
+        if (level >= 1) {
+            cooldownMs = 1 * 3600 * 1000; // Member 1 hour
+        }
+
+        if (maxCompleteness >= 45 && lastGenerated > 0 && (now - lastGenerated < cooldownMs)) {
+             const remainingMinutes = Math.ceil((cooldownMs - (now - lastGenerated)) / 60000);
+             return res.status(StatusCode.HTTP_FORBIDDEN).json({ 
+                success: false, 
+                code: StatusCode.COOLDOWN_ACTIVE,
+                message: `频率限制，请 ${remainingMinutes} 分钟后再试` // Use Chinese as frontend likely expects it or can handle it
+             });
+        }
+
+        // --- Quota Check Removed for Profile Updates ---
+        // Previously: Deducted 1 point. Now: Free, just time-limited.
+        /*
         const quota = membership.pts_quota || { limit: 0, used: 0 };
         const topupBalance = membership.topup_quota || 0;
-        const now = new Date();
-        const isMemberActive = membership.expire_at && new Date(membership.expire_at) > now;
+        const isMemberActive = membership.expire_at && new Date(membership.expire_at) > new Date();
 
         if (isMemberActive && quota.used < quota.limit) {
             await usersCol.updateOne({ _id: user._id }, { $inc: { 'membership.pts_quota.used': 1 } });
@@ -61,6 +89,7 @@ router.post('/parse', upload.single('file'), async (req: Request, res: Response)
                 message: StatusMessage[StatusCode.QUOTA_EXHAUSTED]
              });
         }
+        */
 
         // 1. Extract Profile
         console.log(`[Parse] User ${userAuth.phoneNumber} parsing ${file.originalname} (${file.mimetype})...`);
