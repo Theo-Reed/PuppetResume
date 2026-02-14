@@ -363,17 +363,17 @@ export class ResumeAIService {
   }
 
   /**
-   * 从截图/图片中提取职位信息 (JD, Title, Years)
+   * 从截图/图片或PDF中提取职位信息 (JD, Title, Years)
    */
   async extractJobInfoFromScreenshot(fileBuffer: Buffer, mimeType: string): Promise<any> {
     const prompt = `
     You are an expert Job Description Parser. 
-    Analyze the provided job posting image and extract the following key information into a strictly valid JSON object.
+    Analyze the provided job posting (image or PDF document) and extract the following key information into a strictly valid JSON object.
     
     The JSON structure must be:
     {
       "title": "Job Title (e.g. Senior Frontend Engineer)",
-      "years": 3, // Minimum years of experience required (number). If range "3-5", use 3. If "No experience" or not mentioned, return null (do NOT use 0 unless clearly stated as 'No experience required').
+      "years": 3, // Minimum years of experience required (number). If include range "3-5", use 3. If "No experience" or not mentioned, return null (do NOT use 0 unless clearly stated as 'No experience required').
       "description": "Full job description text including responsibilities and requirements."
     }
     

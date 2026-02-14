@@ -67,7 +67,7 @@ export class GeminiService {
     const models = [
       "gemini-3-pro-preview",
       "gemini-2.5-pro", 
-      "gemini-3-flash-preivew",
+      "gemini-3-flash-preview",
     ];
 
     for (const modelName of models) {
