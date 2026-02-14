@@ -4,7 +4,7 @@ import { generateChinesePrompt } from "./prompts/ChinesePrompt";
 import { generateEnglishPrompt } from "./prompts/EnglishPrompt";
 import { generateExtractionPrompt } from "./prompts/ExtractionPrompt";
 import { ExperienceCalculator } from "./utils/experienceCalculator";
-import pdf from 'pdf-parse';
+const pdf = require('pdf-parse');
 
 export class ResumeAIService {
   private gemini: GeminiService;
@@ -385,7 +385,14 @@ export class ResumeAIService {
     `;
 
     try {
-        const parts = [
+        let parts: any[] = [];
+        let data: any;
+
+        // 直接使用 Gemini 的原生文档理解能力 (Vision/Multimodal)
+        // Gemini Pro 模型对 PDF 的理解包含 OCR 和布局分析，比本地 pdf-parse 更强（尤其是扫描件和多栏排版）
+        console.log(`[JobParse] 发送文件给 Gemini 进行原生解析 (Mime: ${mimeType}, Size: ${fileBuffer.length})`);
+        
+        parts = [
             { text: prompt },
             {
                 inlineData: {
@@ -396,7 +403,7 @@ export class ResumeAIService {
         ];
         
         const result = await this.gemini.generateContentWithParts(parts);
-        let data = this.extractJSON(result);
+        data = this.extractJSON(result);
         
         // Normalize
         if (data.years !== null && typeof data.years !== 'number') {
