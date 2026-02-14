@@ -29,6 +29,12 @@ You are a world-class resume expert specializing in tailoring profiles for Engli
 ### ⭐ User Custom Instructions (HIGHEST PRIORITY)
 - **AI Instruction Content**: "${profile.aiMessage || 'None'}"
 - **Crucial Note**: The user-provided 【AI Instruction】 above has the **highest priority**. If any instruction here conflicts with any of the rules below (including title naming, seniority limits, experience reshaping, etc.), you MUST follow the **【AI Instruction】** without exception.
+- **Mandatory Execution Protocol**:
+  1. Convert the AI Instruction into explicit, executable constraints before writing any content.
+  2. Apply those constraints across all relevant output fields (position, personalIntroduction, professionalSkills, workExperience).
+  3. Before final output, run an internal compliance check against every explicit instruction item.
+  4. If any item is not satisfied, revise internally until fully compliant.
+  5. Do not mention this process in output; output JSON only.
 
 ### 🚨 Core Instructions (Must be Strictly Followed)
 1. **Professional Title Generation**: The generated resume's \`position\` field MUST be a **Standard, Concise Professional Title** following English workplace habits.
@@ -199,7 +205,7 @@ ${(allWorkExperiences || []).map((exp, idx) => {
 }
 
 **⚠️ Key Requirements:**
-- **Highest Priority Reminder**: If the user provided an **AI Instruction** ("${profile.aiMessage || 'None'}"), those instructions MUST be satisfied first, even if they contradict general resume tailoring rules.
+- **Highest Priority Hard Gate**: If the user provided an **AI Instruction** ("${profile.aiMessage || 'None'}"), final JSON is valid only when those instructions are fully satisfied. If not, you must internally rewrite before output.
 - **Company Name Handling**: English names must be PRESERVED exactly; Chinese names must be TRANSLATED professionally. Start/end dates of EXISTING jobs must be preserved exactly.
 - Output strictly in **English**.
 `;

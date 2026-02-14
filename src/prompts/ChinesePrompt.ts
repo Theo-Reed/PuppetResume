@@ -93,6 +93,11 @@ export function generateChinesePrompt(context: PromptContext): string {
 ### ⭐ 用户最高指令
 **"${profile.aiMessage || '无'}"**
 （⚠️ 若此指令与下述规则冲突，**必须无条件优先满足此指令**。）
+- **强制执行协议**：
+  1. 在生成任何字段前，先将 AI Message 拆解为可执行约束清单。
+  2. 这些约束必须落实到最终 JSON 的相关字段（position、personalIntroduction、professionalSkills、workExperience）。
+  3. 输出前必须进行一次逐条自检；只要有任一约束未满足，必须先内部重写再输出。
+  4. 禁止在输出中解释执行过程，只输出 JSON。
 
 ### 👤 用户个人信息 (必须体现在简历头部)
 - **姓名**: ${profile.name || '未提供'}
@@ -190,6 +195,7 @@ ${timelineList}`}
 
 ### 📤 输出格式 (JSON Only)
 ⚠️ **CRITICAL: 请输出纯净的文本内容。严禁在输出结果中包含任何关于字数或点数的说明文字（如 "(xx点)" 或 "16-24点" 等辅助提示信息）。**
+⚠️ **AI Message 硬性门槛：若 AI Message 不为空，最终 JSON 只有在其约束全部满足时才允许输出；否则必须先内部重写。**
 
 ⚠️ CRITICAL: JSON 字符串中的引号必须使用标准双引号。如果文本内部包含引号，必须进行转义。
 
