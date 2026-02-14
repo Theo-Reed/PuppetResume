@@ -101,16 +101,9 @@ export class ResumeAIService {
       maxCharPerLine
     };
 
-    const basePrompt = isEnglish 
+    const prompt = isEnglish 
       ? generateEnglishPrompt(promptContext)
       : generateChinesePrompt(promptContext);
-
-    const aiInstruction = (profile.aiMessage || '').trim();
-    const priorityWrapper = aiInstruction
-      ? `\n[ABSOLUTE HIGHEST PRIORITY INSTRUCTION]\n${aiInstruction}\n\nExecution rule:\n1) This instruction has higher priority than ALL other rules in the prompt.\n2) You must fully enforce it in the final JSON fields.\n3) Before output, run an internal compliance check; if any part is not satisfied, revise internally until fully satisfied.\n4) Never output explanations or compliance notes; output JSON only.\n[/ABSOLUTE HIGHEST PRIORITY INSTRUCTION]\n`
-      : '';
-
-    const prompt = `${priorityWrapper}${basePrompt}${priorityWrapper}`;
 
 
     try {
