@@ -62,7 +62,7 @@ export function generateChinesePrompt(context: PromptContext): string {
     ${segmentsText}
     - **插入规则**: 补充经历必须按时间线插入到现有经历之间，严禁简单堆砌在末尾。`;
   } else {
-    supplementInstruction = '实际年限已满足，**无需补充**虚构经历。';
+    supplementInstruction = '实际年限已满足，**无需补充**虚构经历。你**严禁新增**工作经历条目，输出的工作经历条数必须与用户现有工作经历条数一致。';
   }
 
   // 3. 所有经历的时间线列表（用于提示模型排序）

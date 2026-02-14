@@ -129,7 +129,7 @@ ${(allWorkExperiences || []).map((exp, idx) => {
 3. **No Overlaps**: Must fit into the gaps.
 4. **Position Names**: Natural progression.
 5. **Timeline Order**: Newest on top, oldest at bottom. Insert supplements correctly into the timeline.
-` : 'Actual experience meets requirements. No supplement needed.'}
+` : 'Actual experience meets requirements. No supplement needed. You MUST NOT create any new work experience entries; output count must equal existing experience count.'}
 
 ### 5. Existing Work Experience (Reshape based on Business Direction)
 **⚠️ CRITICAL: Company Name Handling**: 

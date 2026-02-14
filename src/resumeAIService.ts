@@ -159,6 +159,15 @@ export class ResumeAIService {
             throw new Error("AI 生成的工作职责数量不足 8 条，触发重试");
           }
 
+          // 3.1 当无需补充经历时，严禁新增岗位
+          if (!needsSupplement) {
+            const existingCount = (profile.workExperiences || []).length;
+            const generatedCount = Array.isArray(data.workExperience) ? data.workExperience.length : 0;
+            if (generatedCount !== existingCount) {
+              throw new Error(`无需补充经历，但生成岗位数不一致（existing=${existingCount}, generated=${generatedCount}），触发重试`);
+            }
+          }
+
           // 其余素材密度校验仅限中文
           if (!isEnglish) {
 
