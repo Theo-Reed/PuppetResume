@@ -311,7 +311,8 @@
             position: relative;
             line-height: 1.7;
             text-align: justify; /* 添加两端对齐，确保行末对齐 */
-            word-break: break-all; /* 防止长单词导致行末大量空白 */
+            word-break: normal; /* 英文按单词换行，避免单词被截断 */
+            overflow-wrap: break-word; /* 超长连续字符兜底换行 */
         }
         
         .responsibility-item::before {
