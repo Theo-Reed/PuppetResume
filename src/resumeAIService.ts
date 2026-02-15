@@ -141,7 +141,7 @@ export class ResumeAIService {
 
         try {
           const data = parseAIJson(text);
-          const requiredFields = ['position', 'yearsOfExperience', 'personalIntroduction', 'professionalSkills', 'workExperience'];
+          const requiredFields = ['position', 'yearsOfExperience', 'personalIntroduction', 'professionalSkills'];
           for (const field of requiredFields) {
             if (isIllegal(data[field])) {
               throw new Error(`关键字段 "${field}" 内容非法、缺失或包含无效嵌套内容`);
