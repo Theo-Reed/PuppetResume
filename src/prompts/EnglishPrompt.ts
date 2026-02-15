@@ -252,6 +252,10 @@ export function generateEnglishNonJobPrompt(context: PromptContext): string {
     ? `Before ${seniorityThresholdDate}, Senior/Lead/Manager/Expert titles are forbidden. The earliest role cannot be management.`
     : 'Use seniority titles conservatively and only when timeline supports them.';
 
+  const existingExpText = (profile.workExperiences || []).map((exp, idx) =>
+    `- Experience ${idx + 1}: Company=${exp.company} (must preserve company and dates) | Dates=${exp.startDate} to ${exp.endDate} | Original Title=${exp.jobTitle} | Business Direction=${exp.businessDirection}`
+  ).join('\n');
+
   return `
 You are a world-class resume writer. This is Phase 1 (Non-Job Bullet): generate only non-bullet content.
 
@@ -271,6 +275,9 @@ ${supplementText}
 Final timeline (must follow strictly):
 ${timelineList}
 
+Existing experiences (for title-preservation decision):
+${existingExpText || 'None'}
+
 ### What to generate in this phase
 1. Generate complete fields: position, yearsOfExperience, personalIntroduction, professionalSkills, workExperience.
 2. Each workExperience item must include company, position, startDate, endDate.
@@ -288,6 +295,13 @@ ${timelineList}
 7. professionalSkills must have exactly 4 categories with 4 items each, role-relevant.
 8. Do not use markdown bold (**text**) inside JSON strings; only use <b> tags where required.
 9. Output JSON only.
+
+### Mandatory title-preservation workflow (must execute)
+For each existing experience, perform this decision in order:
+1. Decide whether original title is functionally close to target role (same core track/domain).
+2. If functionally close: output position must preserve original title text (only minimal normalization allowed, no semantic renaming).
+3. Only when clearly cross-function mismatch, renaming is allowed.
+4. Final self-check before output: if any functionally-close existing title was renamed, rewrite internally and fix before emitting JSON.
 
 ### Output JSON template
 {
