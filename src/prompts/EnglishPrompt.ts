@@ -256,6 +256,22 @@ export function generateEnglishNonJobPrompt(context: PromptContext): string {
     `- Experience ${idx + 1}: Company=${exp.company} (must preserve company and dates) | Dates=${exp.startDate} to ${exp.endDate} | Original Title=${exp.jobTitle} | Business Direction=${exp.businessDirection}`
   ).join('\n');
 
+  const techTrackPattern = /(backend|frontend|full\s*stack|software|engineer|developer|tech|platform|java|golang|python|node|\.net|react|vue|devops|data|architecture|研发|开发|后端|前端|技术|架构)/i;
+  const leadTitlePattern = /(tech\s*lead|technical\s*lead|engineering\s*lead|team\s*lead|lead\s*engineer|技术负责人|技术主管|研发负责人|技术经理|技术组长|团队负责人)/i;
+  const targetIsTechTrack = techTrackPattern.test(String(targetTitle || ''));
+
+  const lockDecisions = (profile.workExperiences || []).map((exp, idx) => {
+    const originalTitle = String(exp?.jobTitle || '').trim();
+    const businessDirection = String(exp?.businessDirection || '');
+    const workContent = String(exp?.workContent || '');
+    const expIsTechRelated = techTrackPattern.test(`${originalTitle} ${businessDirection} ${workContent}`);
+    const shouldLock = !!originalTitle && (
+      (targetIsTechTrack && expIsTechRelated) ||
+      (leadTitlePattern.test(originalTitle) && (targetIsTechTrack || expIsTechRelated))
+    );
+    return `- Experience ${idx + 1}: originalTitle="${originalTitle || 'N/A'}" | ${shouldLock ? 'LOCK=must keep exactly (no rename/translate/downgrade)' : 'LOCK=rewritable on cross-function mismatch'}`;
+  }).join('\n');
+
   return `
 You are a world-class resume writer. This is Phase 1 (Non-Job Bullet): generate only non-bullet content.
 
@@ -279,6 +295,9 @@ ${timelineList}
 Existing experiences (for title-preservation decision):
 ${existingExpText || 'None'}
 
+### Title lock list (pre-classified, MUST enforce)
+${lockDecisions || 'None'}
+
 ### What to generate in this phase
 1. Generate complete fields: position, yearsOfExperience, personalIntroduction, professionalSkills, workExperience.
 2. Each workExperience item must include company, position, startDate, endDate.
@@ -300,6 +319,7 @@ ${existingExpText || 'None'}
 7. professionalSkills must have exactly 4 categories with 4 items each, role-relevant.
 8. Do not use markdown bold (**text**) inside JSON strings; only use <b> tags where required.
 9. Output JSON only.
+10. For experiences marked as "LOCK=must keep exactly", output workExperience.position must exactly match original title text (except trimming spaces); no translation, no semantic rename, no seniority downgrade.
 
 ### Mandatory title-preservation workflow (must execute)
 For each existing experience, perform this decision in order:

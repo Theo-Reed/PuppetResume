@@ -279,6 +279,22 @@ export function generateChineseNonJobPrompt(context: PromptContext): string {
     `- 经历${idx + 1}: 公司=${exp.company}（必须保留） | 时间=${exp.startDate} 至 ${exp.endDate}（必须保留） | 原职位=${exp.jobTitle} | 业务方向=${exp.businessDirection}`
   ).join('\n');
 
+  const techTrackPattern = /(后端|前端|全栈|研发|开发|技术|架构|算法|数据|运维|测试|java|golang|python|node|\.net|react|vue|engineer|developer|backend|frontend|full\s*stack|software|platform|tech)/i;
+  const leadTitlePattern = /(tech\s*lead|technical\s*lead|engineering\s*lead|team\s*lead|lead\s*engineer|技术负责人|技术主管|研发负责人|技术经理|技术组长|团队负责人)/i;
+  const targetIsTechTrack = techTrackPattern.test(String(targetTitle || ''));
+
+  const lockDecisions = (profile.workExperiences || []).map((exp, idx) => {
+    const originalTitle = String(exp?.jobTitle || '').trim();
+    const businessDirection = String(exp?.businessDirection || '');
+    const workContent = String(exp?.workContent || '');
+    const expIsTechRelated = techTrackPattern.test(`${originalTitle} ${businessDirection} ${workContent}`);
+    const shouldLock = !!originalTitle && (
+      (targetIsTechTrack && expIsTechRelated) ||
+      (leadTitlePattern.test(originalTitle) && (targetIsTechTrack || expIsTechRelated))
+    );
+    return `- 经历${idx + 1}: 原职位="${originalTitle || '无'}" | ${shouldLock ? 'LOCK=必须原样保留（禁止改名/翻译/降级）' : 'LOCK=可按跨职能规则改写'}`;
+  }).join('\n');
+
   return `
 你是顶级中文简历顾问。当前为 Phase 1（Non-Job Bullet）：只生成非职责正文内容。
 
@@ -302,6 +318,9 @@ ${timelineList}
 现有经历信息（公司名和时间不可改）：
 ${existingExpText || '无'}
 
+### 标题保留锁定清单（系统预判，必须硬执行）
+${lockDecisions || '无'}
+
 ### 生成要求（仅 Non-Job）
 1. 生成完整字段：position、yearsOfExperience、personalIntroduction、professionalSkills、workExperience。
 2. workExperience 每条必须包含 company、position、startDate、endDate。
@@ -323,6 +342,9 @@ ${existingExpText || '无'}
 7. professionalSkills 必须 4 组，每组 4 项；禁止“精通/熟悉/掌握/了解”等程度词，仅写技能名或工具名。
 8. 非职责阶段禁止输出任何关于“点数/字数计算过程”的说明语句，只保留最终文本。
 9. 输出必须是合法 JSON，不要解释文本。
+10. 对锁定清单中标记为“LOCK=必须原样保留”的经历：
+  - 输出 workExperience 对应条目的 position 必须与原职位逐字一致（仅允许首尾空格清理）；
+  - 严禁翻译、严禁同义替换、严禁降级（例如 Tech Lead -> 后端开发）。
 
 ### 岗位名保留执行流程（必须逐条执行）
 对每一条【现有经历】先执行判定，再写入 position：
