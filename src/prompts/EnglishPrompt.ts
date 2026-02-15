@@ -53,8 +53,8 @@ You are a world-class resume expert specializing in tailoring profiles for Engli
 3. **Experience Reshaping**:
    - **⚠️ CRITICAL: Existing Company Names MUST remain unchanged** (User-provided names like "Tencent", "Xiaomi" etc. must be kept exactly as is).
    - Keep timeframes unchanged. Rewrite job titles and responsibilities based on "business direction" to highly match "${targetTitle}".
-   - **Job Title Preservation Rule (MUST)**:
-     - If an existing role title is functionally close to the target role (same core function/domain), you MUST keep the original role title (or only do minimal normalization), and should NOT force-renaming.
+   - **Job Title Preservation Rule (HIGHEST-PRIORITY HARD GATE, MUST)**:
+     - If an existing role title is functionally close to the target role (same core function/domain), you MUST keep the original role title (at most minimal normalization), and MUST NOT rename it for title standardization or cosmetic optimization.
      - Only rename when there is a clear cross-function mismatch.
      - Examples:
        * Target: ".NET Engineer"; Existing: "Java Engineer" → keep original title (both are backend engineering track).
@@ -278,7 +278,8 @@ ${timelineList}
 4. Position naming must follow old constraints:
   - concise professional title (ideally 3-4 words, <40 chars), remove suffixes/brackets/recruitment tokens.
   - avoid direct job-ad style naming; keep resume-header style.
-  - if existing title is functionally close, preserve with minimal normalization; rename only on clear cross-function mismatch.
+  - [HIGHEST-PRIORITY HARD GATE] if existing title is functionally close, preserve it (at most minimal normalization); even if other naming rules conflict, do not rename.
+  - rename is allowed only on clear cross-function mismatch.
 5. Company name handling must follow old constraints:
   - if original company name is already English, preserve exactly.
   - if original company name is Chinese, translate to professional English / official brand naming.
