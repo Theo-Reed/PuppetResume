@@ -110,7 +110,7 @@ export function generateChinesePrompt(context: PromptContext): string {
 
 ### 🚨 核心规则 (Strict Execution)
 1. **职位标准化**：将"${targetTitle}"清洗为符合**国内各行各业习惯**的标准职称。
-   - **长度限制**：**所有职位名称（position字段及工作经历中的职位）必须控制在 9 个字符以内**。
+  - **长度限制**：position 字段控制在 9 字以内；workExperience.position 的 9 字限制不适用于“现有且同赛道”的原岗位名。
    - **核心要求**：必须删除括号内容、破折号、招聘术语。
    - **职能属性强制化**：**严禁使用宽泛的通用职称**。必须包含具体业务属性或职能方向。
      * ❌ "开发工程师" -> ✅ "**后端开发工程师**" / "**Android开发**"
@@ -134,6 +134,7 @@ export function generateChinesePrompt(context: PromptContext): string {
    - **职责重写**：抹除无关痕迹，完全围绕"${targetTitle}"重写职责。
    - **岗位名称保留规则（最高优先级硬性规则，必须执行）**：
      - 若用户原岗位名称与目标岗位在职能上高度接近（同一职业赛道/同一核心职能），**必须保留原岗位名**（最多做最小规范化），**不得因“职位标准化”或“命名美化”而改名**。
+     - 若原岗位为行业通用英文职称（如 Tech Lead），同赛道时必须保留英文原文，不得翻译或降级同化。
      - 仅当出现明显跨职能不匹配时，才允许改名并重写。
      - 示例：
        * 目标岗位为 ".NET"，原岗位为"Java工程师" → 视为同属后端工程赛道，应保留原岗位名。
@@ -146,8 +147,9 @@ export function generateChinesePrompt(context: PromptContext): string {
        * ❌ "高级经理" -> ✅ "**高级项目经理**" / "**运营副总监**"
      * 符合命名直觉：如"财务会计"、"法务专员"、"品牌公关"。
 3. **职级控制**：
-   - ${seniorityRule}
+  - ${seniorityRule}
    - ${managementRule}
+  - **豁免条款**：上述职级限制仅用于补充经历或跨职能改写；对“现有且同赛道”的原岗位名（含 Tech Lead/技术负责人）禁止降级改名。
 
 ### ℹ️ 基础信息
 - **目标**: ${targetTitle} (经验要求: ${job.experience}, 最低${requiredExp.min}年)
@@ -258,6 +260,8 @@ export function generateChineseNonJobPrompt(context: PromptContext): string {
     seniorityRule += ` 且在 ${seniorityThresholdDate} 之前的经历中，严禁出现高级或管理职称。最早一段经历不得是管理岗。`;
   }
 
+  seniorityRule += '【豁免条款】上述职级限制仅用于补充经历或跨职能改写；对“现有且同赛道”的原岗位名（如 Tech Lead/技术负责人）必须保留，禁止因职级限制而降级改名。';
+
   const timelineList = (allWorkExperiences || []).map((exp, idx) => {
     if (exp.type === 'existing') {
       const orig = (profile.workExperiences || [])[exp.index!];
@@ -280,6 +284,7 @@ export function generateChineseNonJobPrompt(context: PromptContext): string {
 
 ### 输出语言与优先级
 - 全部字段必须为简体中文。
+- 现有经历中的原职位若为行业通用英文职称（如 Tech Lead、Staff Engineer），且与目标岗位同赛道，允许保留英文原文，不得强制翻译或替换。
 - 用户最高指令："${profile.aiMessage || '无'}"。若与其他规则冲突，优先满足该指令。
 
 ### 目标与背景
@@ -304,6 +309,7 @@ ${existingExpText || '无'}
 4. **职位标准化（与旧版一致）**：
   - 简历抬头 position 控制在 9 字以内；workExperience.position 的 9 字限制仅适用于“补充经历”或“跨职能改写后的经历”。
   - 对“现有经历且同赛道”的岗位名，必须优先保留原文，不受 9 字限制，不得因为长度/命名美化而改名。
+  - 对“现有经历且同赛道”的英文标准职称（如 Tech Lead）必须按原文保留，禁止翻译成“技术负责人”等替代词，除非用户 AI Message 明确要求翻译。
   - 必须去掉括号内容、破折号、招聘术语，避免宽泛通用称呼。
   - 必须体现具体职能属性（例如“后端开发”“新媒体运营”“财务会计”）。
   - 【最高优先级硬性规则】在职能高度接近时，必须保留原岗位名，仅允许最小规范化；即使与其他命名规则冲突，也不得改名。
@@ -322,6 +328,7 @@ ${existingExpText || '无'}
 对每一条【现有经历】先执行判定，再写入 position：
 1. 判定是否与目标岗位同一职能赛道（高度接近）。
 2. 若“高度接近”：输出中该条 position 必须与原职位文本保持一致（仅允许极小规范化，如空格清理，禁止语义改写）。
+2.1 若原职位为英文标准职称（如 Tech Lead），在同赛道条件下必须保持原文大小写语义，不得翻译、不得降级、不得同化为目标岗位通用名称。
 3. 若“明显跨职能”：才允许改写 position。
 4. 输出前最终自检：逐条核对“现有经历”的 position，凡是同赛道但被改名的，必须先内部重写后再输出。
 
@@ -381,6 +388,7 @@ export function generateChineseJobBulletPrompt(
 
 ### 语言与风格
 - 全中文输出。
+- 但对“现有且同赛道”的英文标准职称（如 Tech Lead），允许并建议在职责语义中保持该职级语义，不得降级为普通执行岗口径。
 - 目标岗位：${context.targetTitle}
 - 用户最高指令："${context.profile.aiMessage || '无'}"（若不为空，必须严格满足）
 

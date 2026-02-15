@@ -268,6 +268,7 @@ You are a world-class resume writer. This is Phase 1 (Non-Job Bullet): generate 
 - Experience requirement: ${job.experience} (${experienceRequirementStr})
 - Candidate actual experience: ${actualExperienceText}
 - Seniority rule: ${seniorityRule}
+- Exception: seniority restrictions apply to supplemental or cross-function rewritten roles only; for existing same-track titles (e.g., Tech Lead), preserve original title and leadership level.
 
 ### Timeline and supplement policy
 ${supplementText}
@@ -304,6 +305,7 @@ ${existingExpText || 'None'}
 For each existing experience, perform this decision in order:
 1. Decide whether original title is functionally close to target role (same core track/domain).
 2. If functionally close: output position must preserve original title text (only minimal normalization allowed, no semantic renaming).
+2.1 If original title is an established English role title (e.g., Tech Lead), preserve original wording and leadership semantics; do not translate, downgrade, or homogenize.
 3. Only when clearly cross-function mismatch, renaming is allowed.
 4. Final self-check before output: if any functionally-close existing title was renamed, rewrite internally and fix before emitting JSON.
 
