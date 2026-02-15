@@ -305,6 +305,7 @@ For each existing experience, perform this decision in order:
 
 Hard examples (must follow):
 - Target role ".NET Developer", original title "Java Developer" => same backend track, must keep "Java Developer" (do NOT rename to .NET).
+- Target role "Backend Developer", original title "Tech Lead" => includes backend scope and is same track; must keep "Tech Lead" or a highly similar title (e.g., "Backend Tech Lead"), and must not downgrade to plain "Backend Developer".
 - Target role "Backend Engineer", original title "Golang Engineer" => same backend track, must keep original title.
 - Target role "Backend Engineer", original title "Product Manager" => cross-function mismatch, renaming is allowed.
 
