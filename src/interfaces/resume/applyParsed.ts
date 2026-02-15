@@ -141,5 +141,3 @@ router.post('/apply-parsed', upload.single('file'), async (req: Request, res: Re
 });
 
 export default router;
-
-export default router;

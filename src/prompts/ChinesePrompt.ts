@@ -1,4 +1,4 @@
-import { PromptContext } from './types';
+import { BulletPhaseWorkExperience, PromptContext } from './types';
 
 export function generateChinesePrompt(context: PromptContext): string {
   const {
@@ -231,5 +231,155 @@ ${timelineList}`}
   ]
 }
 \`\`\`
+`;
+}
+
+export function generateChineseNonJobPrompt(context: PromptContext): string {
+  const {
+    targetTitle,
+    job,
+    requiredExp,
+    profile,
+    needsSupplement,
+    actualExperienceText,
+    supplementYears,
+    supplementSegments,
+    allWorkExperiences,
+    earliestWorkDate,
+    seniorityThresholdDate,
+    maxCharPerLine,
+  } = context;
+
+  let seniorityRule = requiredExp.min <= 5
+    ? '严禁使用“高级/资深/专家/负责人/主管”等高职级称谓。'
+    : '可谨慎使用“高级”，仅在履历与时间线支撑时使用“资深/负责人/主管”。';
+
+  if (seniorityThresholdDate) {
+    seniorityRule += ` 且在 ${seniorityThresholdDate} 之前的经历中，严禁出现高级或管理职称。最早一段经历不得是管理岗。`;
+  }
+
+  const timelineList = (allWorkExperiences || []).map((exp, idx) => {
+    if (exp.type === 'existing') {
+      const orig = (profile.workExperiences || [])[exp.index!];
+      if (!orig) return `${idx + 1}. [现有缺失] (${exp.startDate} 至 ${exp.endDate})`;
+      return `${idx + 1}. [现有] ${orig.company} | ${orig.startDate} 至 ${orig.endDate}`;
+    }
+    return `${idx + 1}. [补充] (生成公司) | ${exp.startDate} 至 ${exp.endDate}`;
+  }).join('\n');
+
+  const supplementText = needsSupplement
+    ? `需要补充约 ${supplementYears} 年经历。开始时间不得早于 ${earliestWorkDate}。\n补充片段：\n${(supplementSegments || []).map((seg, idx) => `- 片段${idx + 1}: ${seg.startDate} 至 ${seg.endDate}（${seg.years}年）`).join('\n')}\n补充经历必须插入时间线中，不得全部堆在末尾。`
+    : '无需补充经历。输出工作经历条数必须与用户现有条数一致，严禁新增岗位。';
+
+  const existingExpText = (profile.workExperiences || []).map((exp, idx) =>
+    `- 经历${idx + 1}: 公司=${exp.company}（必须保留） | 时间=${exp.startDate} 至 ${exp.endDate}（必须保留） | 原职位=${exp.jobTitle} | 业务方向=${exp.businessDirection}`
+  ).join('\n');
+
+  return `
+你是顶级中文简历顾问。当前为 Phase 1（Non-Job Bullet）：只生成非职责正文内容。
+
+### 输出语言与优先级
+- 全部字段必须为简体中文。
+- 用户最高指令："${profile.aiMessage || '无'}"。若与其他规则冲突，优先满足该指令。
+
+### 目标与背景
+- 目标岗位：${targetTitle}
+- JD经验要求：${job.experience}（最低 ${requiredExp.min} 年）
+- 用户实际经验：${actualExperienceText}
+- 职级规则：${seniorityRule}
+
+### 时间线与补充策略
+${supplementText}
+
+最终时间线（必须严格遵循）：
+${timelineList}
+
+现有经历信息（公司名和时间不可改）：
+${existingExpText || '无'}
+
+### 生成要求（仅 Non-Job）
+1. 生成完整字段：position、yearsOfExperience、personalIntroduction、professionalSkills、workExperience。
+2. workExperience 每条必须包含 company、position、startDate、endDate。
+3. 本阶段严禁生成职责正文：每条 responsibilities 必须是空数组 []。
+4. **职位标准化（与旧版一致）**：
+  - 所有职位名称（position 及 workExperience.position）控制在 9 字以内。
+  - 必须去掉括号内容、破折号、招聘术语，避免宽泛通用称呼。
+  - 必须体现具体职能属性（例如“后端开发”“新媒体运营”“财务会计”）。
+  - 在职能高度接近时优先保留原岗位名，仅做最小规范化；跨职能时允许改写。
+5. personalIntroduction 仅两段，必须省略主语，避免“我/本人/该候选人”；不得出现小数年限。
+6. personalIntroduction 点数区间（视觉字数点数：中文1，英数0.5）：
+  - 第一段：${Math.floor((maxCharPerLine || 44) * 2.7)} 到 ${Math.floor((maxCharPerLine || 44) * 3.1)}
+  - 第二段：${Math.floor((maxCharPerLine || 44) * 1.3)} 到 ${Math.floor((maxCharPerLine || 44) * 1.7)}
+7. professionalSkills 必须 4 组，每组 4 项；禁止“精通/熟悉/掌握/了解”等程度词，仅写技能名或工具名。
+8. 非职责阶段禁止输出任何关于“点数/字数计算过程”的说明语句，只保留最终文本。
+9. 输出必须是合法 JSON，不要解释文本。
+
+### 输出 JSON 模板
+{
+  "position": "...",
+  "yearsOfExperience": ${context.finalTotalYears},
+  "personalIntroduction": "...",
+  "professionalSkills": [
+    { "title": "...", "items": ["...", "...", "...", "..."] },
+    { "title": "...", "items": ["...", "...", "...", "..."] },
+    { "title": "...", "items": ["...", "...", "...", "..."] },
+    { "title": "...", "items": ["...", "...", "...", "..."] }
+  ],
+  "workExperience": [
+    {
+      "company": "...",
+      "position": "...",
+      "startDate": "...",
+      "endDate": "...",
+      "responsibilities": []
+    }
+  ]
+}
+`;
+}
+
+export function generateChineseJobBulletPrompt(
+  context: PromptContext,
+  workExperiences: BulletPhaseWorkExperience[]
+): string {
+  const lines = workExperiences.map((exp, idx) => `
+- 经历${idx + 1}：${exp.company} | ${exp.position} | ${exp.startDate} 至 ${exp.endDate}`).join('');
+
+  return `
+你是一位顶级简历写作专家。当前是 Phase 2（Job Bullet）：仅生成工作经历职责正文。不得改动骨架。
+
+### 语言与风格
+- 全中文输出。
+- 目标岗位：${context.targetTitle}
+- 用户最高指令："${context.profile.aiMessage || '无'}"（若不为空，必须严格满足）
+
+### 输入的工作经历（禁止改动基础信息）
+以下经历的 company / position / startDate / endDate 均已定稿，严禁修改：
+${lines}
+
+### 生成要求（严格）
+1. 按原顺序返回 workExperience，条目数量必须与输入一致。
+2. 每段经历必须生成且仅生成 8 条 responsibilities。
+3. 每条职责必须围绕目标岗位，按重要性排序，采用 STAR 思路并包含可量化结果。
+4. 禁止空泛表达（如“大幅提升/显著优化”但无数字证据）。
+5. 每条职责视觉字数点数（中文1，英数0.5）目标区间：${Math.floor((context.maxCharPerLine || 42) * 1.85)} ~ ${Math.floor((context.maxCharPerLine || 42) * 2.15)}。
+6. 每段第 1 条职责必须含 1 处 <b> 关键词；其余条目中再选 2 条各含 1 处 <b>（每段共 3 条含加粗）。
+7. 可使用少量 <u> 标记关键数据，但同一片段不得同时 <b> 与 <u>。
+8. 仅在 responsibilities 写内容，严禁新增字段、改写职位或改写时间。
+9. 第二行不得过短（目标为接近双行饱满），避免出现明显留白。
+10. 若信息较少也必须补足 8 条高质量职责。
+
+### 输出格式（JSON Only）
+{
+  "workExperience": [
+    {
+      "company": "...",
+      "position": "...",
+      "startDate": "...",
+      "endDate": "...",
+      "responsibilities": ["...", "...", "...", "...", "...", "...", "...", "..."]
+    }
+  ]
+}
 `;
 }

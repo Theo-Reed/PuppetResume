@@ -1,4 +1,4 @@
-import { PromptContext } from './types';
+import { BulletPhaseWorkExperience, PromptContext } from './types';
 
 export function generateEnglishPrompt(context: PromptContext): string {
   const {
@@ -209,10 +209,150 @@ ${(allWorkExperiences || []).map((exp, idx) => {
     { "company": "[English Name / Translated]", "position": "Tailored Title", "startDate": "...", "endDate": "...", "responsibilities": [...] }`}
   ]
 }
-
 **⚠️ Key Requirements:**
 - **Highest Priority Hard Gate**: If the user provided an **AI Instruction** ("${profile.aiMessage || 'None'}"), final JSON is valid only when those instructions are fully satisfied. If not, you must internally rewrite before output.
 - **Company Name Handling**: English names must be PRESERVED exactly; Chinese names must be TRANSLATED professionally. Start/end dates of EXISTING jobs must be preserved exactly.
 - Output strictly in **English**.
+`;
+}
+
+export function generateEnglishNonJobPrompt(context: PromptContext): string {
+  const {
+    targetTitle,
+    job,
+    requiredExp,
+    profile,
+    needsSupplement,
+    actualExperienceText,
+    supplementYears,
+    supplementSegments,
+    allWorkExperiences,
+    earliestWorkDate,
+    seniorityThresholdDate,
+  } = context;
+
+  const experienceRequirementStr = requiredExp.max !== 999
+    ? `${requiredExp.min} years (maximum ${requiredExp.max} years)`
+    : `at least ${requiredExp.min} years`;
+
+  const timelineList = (allWorkExperiences || []).map((exp, idx) => {
+    if (exp.type === 'existing') {
+      const orig = (profile.workExperiences || [])[exp.index!];
+      if (!orig) return `${idx + 1}. [Existing Missing] ${exp.startDate} to ${exp.endDate}`;
+      return `${idx + 1}. [Existing] ${orig.company} | ${orig.startDate} to ${orig.endDate}`;
+    }
+    return `${idx + 1}. [Supplement] [Generate Company] | ${exp.startDate} to ${exp.endDate}`;
+  }).join('\n');
+
+  const supplementText = needsSupplement
+    ? `Supplement is required: approximately ${supplementYears} years. Start date cannot be earlier than ${earliestWorkDate}.\nSegments:\n${(supplementSegments || []).map((seg, idx) => `- Segment ${idx + 1}: ${seg.startDate} to ${seg.endDate} (${seg.years} years)`).join('\n')}\nSupplement entries must be inserted into timeline, not appended blindly.`
+    : 'No supplement is required. Output workExperience count must equal the existing count; no new role is allowed.';
+
+  const seniorityRule = seniorityThresholdDate
+    ? `Before ${seniorityThresholdDate}, Senior/Lead/Manager/Expert titles are forbidden. The earliest role cannot be management.`
+    : 'Use seniority titles conservatively and only when timeline supports them.';
+
+  return `
+You are a world-class resume writer. This is Phase 1 (Non-Job Bullet): generate only non-bullet content.
+
+### Language and priority
+- Output must be strictly in English.
+- Highest-priority user instruction: "${profile.aiMessage || 'None'}". If conflict exists, follow it.
+
+### Target and constraints
+- Target role: ${targetTitle}
+- Experience requirement: ${job.experience} (${experienceRequirementStr})
+- Candidate actual experience: ${actualExperienceText}
+- Seniority rule: ${seniorityRule}
+
+### Timeline and supplement policy
+${supplementText}
+
+Final timeline (must follow strictly):
+${timelineList}
+
+### What to generate in this phase
+1. Generate complete fields: position, yearsOfExperience, personalIntroduction, professionalSkills, workExperience.
+2. Each workExperience item must include company, position, startDate, endDate.
+3. Responsibilities are forbidden in this phase: each responsibilities must be [].
+4. Position naming must follow old constraints:
+  - concise professional title (ideally 3-4 words, <40 chars), remove suffixes/brackets/recruitment tokens.
+  - avoid direct job-ad style naming; keep resume-header style.
+  - if existing title is functionally close, preserve with minimal normalization; rename only on clear cross-function mismatch.
+5. Company name handling must follow old constraints:
+  - if original company name is already English, preserve exactly.
+  - if original company name is Chinese, translate to professional English / official brand naming.
+  - do not invent unrelated company entities for existing roles.
+6. personalIntroduction must be exactly 2 paragraphs in implied first-person style (no “I/My”), no decimal years, and include exactly 2 <b> keywords.
+7. professionalSkills must have exactly 4 categories with 4 items each, role-relevant.
+8. Do not use markdown bold (**text**) inside JSON strings; only use <b> tags where required.
+9. Output JSON only.
+
+### Output JSON template
+{
+  "position": "...",
+  "yearsOfExperience": ${context.finalTotalYears},
+  "personalIntroduction": "...",
+  "professionalSkills": [
+    { "title": "...", "items": ["...", "...", "...", "..."] },
+    { "title": "...", "items": ["...", "...", "...", "..."] },
+    { "title": "...", "items": ["...", "...", "...", "..."] },
+    { "title": "...", "items": ["...", "...", "...", "..."] }
+  ],
+  "workExperience": [
+    {
+      "company": "...",
+      "position": "...",
+      "startDate": "...",
+      "endDate": "...",
+      "responsibilities": []
+    }
+  ]
+}
+`;
+}
+
+export function generateEnglishJobBulletPrompt(
+  context: PromptContext,
+  workExperiences: BulletPhaseWorkExperience[]
+): string {
+  const lines = workExperiences.map((exp, idx) => `
+- Experience ${idx + 1}: ${exp.company} | ${exp.position} | ${exp.startDate} to ${exp.endDate}`).join('');
+
+  return `
+You are a world-class resume writer. This is Phase 2 (Job Bullet): generate only responsibilities.
+
+### Language and priority
+- Output strictly in English.
+- Target role: ${context.targetTitle}
+- Highest-priority user instruction: "${context.profile.aiMessage || 'None'}" (must be satisfied when present)
+
+### Fixed work experience skeleton (must not be changed)
+The company / position / startDate / endDate below are finalized. Do not modify them:
+${lines}
+
+### Strict requirements
+1. Return workExperience in the same order and same count as input.
+2. Generate exactly 8 responsibilities for each role.
+3. Responsibilities must be impact-first, quantified where possible, and tailored to ${context.targetTitle}.
+4. Use strong action verbs; avoid weak phrasing like “Responsible for” or “Helped with”.
+5. Follow STAR logic and keep each bullet outcome-oriented.
+6. Bolding rule per role: first bullet must contain exactly one <b> segment; among remaining bullets, exactly two bullets each contain one <b> segment (total 3 bullets with <b> per role).
+7. Avoid acronym-with-parentheses style for professional methodologies (write full terms when possible).
+8. Do not add, remove, or rewrite non-responsibility fields.
+9. Even if context is sparse, still provide 8 high-quality bullets.
+
+### Output format (JSON only)
+{
+  "workExperience": [
+    {
+      "company": "...",
+      "position": "...",
+      "startDate": "...",
+      "endDate": "...",
+      "responsibilities": ["...", "...", "...", "...", "...", "...", "...", "..."]
+    }
+  ]
+}
 `;
 }

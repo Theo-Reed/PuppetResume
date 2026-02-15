@@ -19,3 +19,10 @@ export interface PromptContext {
   // 排版控制元数据
   maxCharPerLine?: number;     // 每行目标字符数 (中文字符权重为1，英数权重为0.5)
 }
+
+export interface BulletPhaseWorkExperience {
+  company: string;
+  position: string;
+  startDate: string;
+  endDate: string;
+}

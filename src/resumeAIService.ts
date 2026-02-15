@@ -1,9 +1,10 @@
 import { GeminiService } from "./geminiService";
 import { GenerateFromFrontendRequest, ResumeData, mapFrontendRequestToResumeData } from "./types";
-import { generateChinesePrompt } from "./prompts/ChinesePrompt";
-import { generateEnglishPrompt } from "./prompts/EnglishPrompt";
+import { generateChineseJobBulletPrompt, generateChineseNonJobPrompt } from "./prompts/ChinesePrompt";
+import { generateEnglishJobBulletPrompt, generateEnglishNonJobPrompt } from "./prompts/EnglishPrompt";
 import { generateExtractionPrompt } from "./prompts/ExtractionPrompt";
 import { ExperienceCalculator } from "./utils/experienceCalculator";
+import { BulletPhaseWorkExperience } from "./prompts/types";
 const pdf = require('pdf-parse');
 
 export class ResumeAIService {
@@ -101,14 +102,13 @@ export class ResumeAIService {
       maxCharPerLine
     };
 
-    const prompt = isEnglish 
-      ? generateEnglishPrompt(promptContext)
-      : generateChinesePrompt(promptContext);
-
-
     try {
-      const aiResponse = await this.gemini.generateContent(prompt, (text) => {
-        // 1. 全局非法内容扫描 (Gemini 常见异常输出)
+      const parseAIJson = (text: string): any => {
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(jsonStr);
+      };
+
+      const assertNoIllegalOutput = (text: string): void => {
         const lowerText = text.toLowerCase();
         const illegalPatterns = [
           "_placeholder_",
@@ -119,8 +119,8 @@ export class ResumeAIService {
           "my programming",
           "对不起，我无法",
           "抱歉，我不能",
-          "---", 
-          "...",  
+          "---",
+          "...",
         ];
 
         if (illegalPatterns.some(p => text.includes(p) || lowerText.includes(p))) {
@@ -130,12 +130,17 @@ export class ResumeAIService {
         if (text.includes("\uFFFD")) {
           throw new Error("检测到 AI 输出包含 Unicode 替换字符 (\uFFFD)");
         }
+      };
+
+      const nonJobPrompt = isEnglish
+        ? generateEnglishNonJobPrompt(promptContext)
+        : generateChineseNonJobPrompt(promptContext);
+
+      const nonJobResponse = await this.gemini.generateContent(nonJobPrompt, (text) => {
+        assertNoIllegalOutput(text);
 
         try {
-          const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-          const data = JSON.parse(jsonStr);
-          
-          // 2. 严格验证字段
+          const data = parseAIJson(text);
           const requiredFields = ['position', 'yearsOfExperience', 'personalIntroduction', 'professionalSkills', 'workExperience'];
           for (const field of requiredFields) {
             if (isIllegal(data[field])) {
@@ -143,34 +148,31 @@ export class ResumeAIService {
             }
           }
 
-          // 3. 数量强制校验
-          // 校验工作经历职责数量 (中英文都必须为 8，确保后续裁剪素材充足)
-          const hasWrongResponsibilityCount = data.workExperience.some((exp: any) => 
-             !exp.responsibilities || exp.responsibilities.length !== 8
-          );
-          if (hasWrongResponsibilityCount) {
-            throw new Error("AI 生成的工作职责数量不足 8 条，触发重试");
+          if (!Array.isArray(data.workExperience) || data.workExperience.length === 0) {
+            throw new Error('workExperience 不能为空');
           }
 
-          // 3.1 当无需补充经历时，严禁新增岗位
+          const invalidSkeleton = data.workExperience.some((exp: any) =>
+            isIllegal(exp.company) || isIllegal(exp.position) || isIllegal(exp.startDate) || isIllegal(exp.endDate)
+          );
+          if (invalidSkeleton) {
+            throw new Error('workExperience 骨架字段不完整');
+          }
+
           if (!needsSupplement) {
             const existingCount = (profile.workExperiences || []).length;
-            const generatedCount = Array.isArray(data.workExperience) ? data.workExperience.length : 0;
+            const generatedCount = data.workExperience.length;
             if (generatedCount !== existingCount) {
               throw new Error(`无需补充经历，但生成岗位数不一致（existing=${existingCount}, generated=${generatedCount}），触发重试`);
             }
           }
 
-          // 其余素材密度校验仅限中文
           if (!isEnglish) {
-
-            // 校验技能分类数量 (必须为 4)
             if (data.professionalSkills.length !== 4) {
               throw new Error("AI 生成的技能分类数量不足 4 组，触发重试");
             }
 
-            // 校验每个技能分类下的点数 (必须为 4)
-            const hasWrongSkillItemCount = data.professionalSkills.some((cat: any) => 
+            const hasWrongSkillItemCount = data.professionalSkills.some((cat: any) =>
               !cat.items || cat.items.length !== 4
             );
             if (hasWrongSkillItemCount) {
@@ -180,13 +182,71 @@ export class ResumeAIService {
 
           return true;
         } catch (e: any) {
-          throw new Error(`逻辑校验未通过: ${e.message}`);
+          throw new Error(`非职责阶段校验未通过: ${e.message}`);
         }
       });
 
-      // 如果能执行到这里，说明已经通过了上面的 validator 校验
-      const jsonStr = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-      const enhancedData = JSON.parse(jsonStr);
+      const nonJobData = parseAIJson(nonJobResponse);
+      const workSkeleton: BulletPhaseWorkExperience[] = (nonJobData.workExperience || []).map((exp: any) => ({
+        company: exp.company,
+        position: exp.position,
+        startDate: exp.startDate,
+        endDate: exp.endDate,
+      }));
+
+      const jobBulletPrompt = isEnglish
+        ? generateEnglishJobBulletPrompt(promptContext, workSkeleton)
+        : generateChineseJobBulletPrompt(promptContext, workSkeleton);
+
+      const jobBulletResponse = await this.gemini.generateContent(jobBulletPrompt, (text) => {
+        assertNoIllegalOutput(text);
+
+        try {
+          const data = parseAIJson(text);
+          if (!Array.isArray(data.workExperience)) {
+            throw new Error('workExperience 必须为数组');
+          }
+
+          if (data.workExperience.length !== workSkeleton.length) {
+            throw new Error(`职责阶段岗位数不一致（expected=${workSkeleton.length}, got=${data.workExperience.length}）`);
+          }
+
+          data.workExperience.forEach((exp: any, idx: number) => {
+            const base = workSkeleton[idx];
+            if (!base) {
+              throw new Error(`职责阶段存在越界岗位 index=${idx}`);
+            }
+
+            if (exp.company !== base.company || exp.position !== base.position || exp.startDate !== base.startDate || exp.endDate !== base.endDate) {
+              throw new Error(`职责阶段非法修改岗位骨架 index=${idx}`);
+            }
+
+            if (!Array.isArray(exp.responsibilities) || exp.responsibilities.length !== 8) {
+              throw new Error(`职责数量不足 8 条 index=${idx}`);
+            }
+
+            const hasIllegalResp = exp.responsibilities.some((item: any) => isIllegal(item));
+            if (hasIllegalResp) {
+              throw new Error(`职责内容存在非法值 index=${idx}`);
+            }
+          });
+
+          return true;
+        } catch (e: any) {
+          throw new Error(`职责阶段校验未通过: ${e.message}`);
+        }
+      });
+
+      const bulletData = parseAIJson(jobBulletResponse);
+      const mergedWorkExperience = workSkeleton.map((baseExp, idx) => ({
+        ...baseExp,
+        responsibilities: bulletData.workExperience[idx]?.responsibilities || [],
+      }));
+
+      const enhancedData = {
+        ...nonJobData,
+        workExperience: mergedWorkExperience,
+      };
 
       // 3. 记录视觉内容密度 (仅记录日志，不再抛出异常，由本地代码执行裁剪)
       if (!isEnglish && enhancedData.workExperience) {

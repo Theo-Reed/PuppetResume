@@ -170,6 +170,7 @@ export interface GenerateFromFrontendRequest {
   jobId: string;
   openid: string; // Standardized from userId
   language?: string;
+  is_paid?: boolean;
   resume_profile: UserResumeProfile;
   job_data: JobData;
   enhancedData?: ResumeData; // 用于物理文件过期后的快速恢复（免AI调用）
